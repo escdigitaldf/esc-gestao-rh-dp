@@ -1,43 +1,35 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Activity, Bell, CalendarDays, ChevronDown, ClipboardList, FileText, LayoutDashboard, LogOut, Search, Settings, Users, WalletCards } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-
-export default function Dashboard() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [company, setCompany] = useState("Minha organização");
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const supabase = createClient();
-    async function load() {
-      const {data:{user},error} = await supabase.auth.getUser();
-      if (error || !user) { router.replace("/"); return; }
-      setEmail(user.email ?? "");
-      const {data: memberships} = await supabase.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1);
-      if (!memberships?.length) { router.replace("/onboarding"); return; }
-      const orgId = memberships[0].organization_id;
-      const {data:org} = await supabase.from("organizations").select("trade_name,legal_name").eq("id",orgId).single();
-      if (org) setCompany(org.trade_name || org.legal_name);
-      setLoading(false);
-    }
-    void load();
-  }, [router]);
-  async function logout() { const supabase = createClient(); await supabase.auth.signOut(); router.replace("/"); router.refresh(); }
-  if (loading) return <div className="loading-screen">Carregando ambiente seguro...</div>;
-  const items = [{icon:LayoutDashboard,label:"Visão geral",href:"/dashboard",active:true},{icon:Users,label:"Colaboradores",href:"/dashboard/colaboradores"},{icon:ClipboardList,label:"Admissões",href:"#"}, {icon:CalendarDays,label:"Férias e afastamentos",href:"#"},{icon:Activity,label:"Saúde ocupacional",href:"#"},{icon:FileText,label:"Treinamentos",href:"#"},{icon:WalletCards,label:"Departamento pessoal",href:"#"},{icon:Settings,label:"Configurações",href:"#"}];
-  return <main className="dash-shell">
-    <aside className="sidebar"><div className="brand side-brand"><div className="brand-mark">ESC</div><div><strong>ESC</strong><span>GESTÃO DE RH E DP</span></div></div><div className="side-label">MENU PRINCIPAL</div><nav>{items.map(item=><a key={item.label} className={item.active?"nav-item selected":"nav-item"} href={item.href}><item.icon size={18}/>{item.label}</a>)}</nav><div className="side-bottom"><div className="tenant-chip"><div className="tenant-avatar">{company.slice(0,1).toUpperCase()}</div><div><b>{company}</b><span>Ambiente da empresa</span></div><ChevronDown size={15}/></div><button className="logout" onClick={logout}><LogOut size={17}/> Sair da plataforma</button></div></aside>
-    <section className="dash-main"><header className="dash-top"><div className="searchbox"><Search size={17}/><span>Buscar recursos...</span></div><div className="top-actions"><button aria-label="Notificações"><Bell size={19}/></button><div className="user-pill"><div className="user-avatar">{email.slice(0,1).toUpperCase()}</div><span>{email}</span></div></div></header>
-      <div className="dash-content"><div className="welcome-row"><div><div className="form-kicker">PAINEL DE CONTROLE</div><h1>Visão geral</h1><p>Bem-vindo ao ambiente de gestão de {company}.</p></div><div className="date-chip"><CalendarDays size={16}/> {new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}</div></div>
-      <div className="setup-banner"><div className="setup-icon"><Activity/></div><div><b>Ambiente empresarial configurado</b><p>Comece cadastrando departamentos, cargos e colaboradores.</p></div><span className="status-pill">ATIVO</span></div>
-      <div className="section-heading"><h2>Indicadores de RH</h2><span>Indicadores atualizados conforme os cadastros</span></div>
-      <div className="metric-grid">{[{label:"Colaboradores ativos",value:"—",icon:Users},{label:"Férias programadas",value:"—",icon:CalendarDays},{label:"Exames pendentes",value:"—",icon:Activity},{label:"Treinamentos",value:"—",icon:FileText}].map(m=><div className="metric-card" key={m.label}><div className="metric-top"><span>{m.label}</span><m.icon size={19}/></div><strong>{m.value}</strong><small>Aguardando registros</small></div>)}</div>
-      <div className="section-heading"><h2>Acesso rápido</h2><span>Atalhos para os módulos principais</span></div>
-      <div className="quick-grid">{items.slice(1,7).map(item=><a href={item.href} className="quick-card" key={item.label}><div><item.icon size={20}/></div><b>{item.label}</b><span>Acessar módulo <span aria-hidden>→</span></span></a>)}</div>
-      <div className="footer-note">ESC Gestão de RH e DP <span>•</span> Plataforma em implantação</div></div>
-    </section>
-  </main>;
+import {useCallback,useEffect,useState} from "react";
+import {useRouter} from "next/navigation";
+import {Activity,Bell,BriefcaseBusiness,CalendarDays,ChevronDown,ClipboardList,FileText,LayoutDashboard,LogOut,Search,Settings,Users,WalletCards,Building2,ArrowUpRight,ShieldCheck} from "lucide-react";
+import {createClient} from "@/lib/supabase/client";
+type Counts={employees:number;active:number;departments:number;positions:number};
+export default function Dashboard(){
+ const router=useRouter();const [email,setEmail]=useState("");const [company,setCompany]=useState("");const [role,setRole]=useState("");const [trial,setTrial]=useState<string|null>(null);const [counts,setCounts]=useState<Counts>({employees:0,active:0,departments:0,positions:0});const [loading,setLoading]=useState(true);const [error,setError]=useState("");
+ const load=useCallback(async()=>{const s=createClient();const {data:{user},error:authError}=await s.auth.getUser();if(authError||!user){router.replace("/");return;}setEmail(user.email||"");const {data:membership,error:memberError}=await s.from("organization_memberships").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();if(memberError){setError(memberError.message);setLoading(false);return;}if(!membership){router.replace("/onboarding");return;}setRole(membership.role);const orgId=membership.organization_id;const [{data:org,error:orgError},{count:employees,error:empError},{count:active,error:activeError},{count:departments,error:deptError},{count:positions,error:posError}]=await Promise.all([
+ s.from("organizations").select("trade_name,legal_name,status,trial_ends_at").eq("id",orgId).single(),
+ s.from("employees").select("id",{count:"exact",head:true}).eq("organization_id",orgId),
+ s.from("employees").select("id",{count:"exact",head:true}).eq("organization_id",orgId).eq("employment_status","active"),
+ s.from("departments").select("id",{count:"exact",head:true}).eq("organization_id",orgId),
+ s.from("positions").select("id",{count:"exact",head:true}).eq("organization_id",orgId)
+ ]);const issue=orgError||empError||activeError||deptError||posError;if(issue)setError(issue.message);if(org){setCompany(org.trade_name||org.legal_name);setTrial(org.trial_ends_at||null);}setCounts({employees:employees||0,active:active||0,departments:departments||0,positions:positions||0});setLoading(false);
+ },[router]);
+ useEffect(()=>{void load()},[load]);
+ async function logout(){const s=createClient();await s.auth.signOut();router.replace("/");router.refresh();}
+ if(loading)return <div className="loading-screen">Carregando seu ambiente de gestão...</div>;
+ const nav=[{label:"Visão geral",href:"/dashboard",icon:LayoutDashboard,group:"PRINCIPAL"},{label:"Colaboradores",href:"/dashboard/colaboradores",icon:Users,group:"GESTÃO DE PESSOAS"},{label:"Departamentos",href:"/dashboard/departamentos",icon:Building2,group:"GESTÃO DE PESSOAS"},{label:"Cargos",href:"/dashboard/cargos",icon:BriefcaseBusiness,group:"GESTÃO DE PESSOAS"}];
+ const shortcuts=[{label:"Colaboradores",desc:"Cadastro e quadro funcional",href:"/dashboard/colaboradores",icon:Users,value:counts.employees},{label:"Departamentos",desc:"Setores e áreas da empresa",href:"/dashboard/departamentos",icon:Building2,value:counts.departments},{label:"Cargos",desc:"Funções e CBO",href:"/dashboard/cargos",icon:BriefcaseBusiness,value:counts.positions}];
+ return <main className="dash-shell"><aside className="sidebar"><div className="brand side-brand"><div className="brand-mark">ESC</div><div><strong>ESC</strong><span>GESTÃO DE RH E DP</span></div></div><nav className="dash-nav">{["PRINCIPAL","GESTÃO DE PESSOAS"].map(group=><div key={group}><div className="side-label">{group}</div>{nav.filter(x=>x.group===group).map(item=><a key={item.href} className={item.href==="/dashboard"?"nav-item selected":"nav-item"} href={item.href}><item.icon size={18}/>{item.label}</a>)}</div>)}</nav><div className="side-bottom"><div className="tenant-chip"><div className="tenant-avatar">{(company||"E").slice(0,1).toUpperCase()}</div><div><b>{company||"Empresa"}</b><span>Ambiente empresarial</span></div><ChevronDown size={15}/></div><button className="logout" onClick={logout}><LogOut size={17}/> Sair da plataforma</button></div></aside>
+ <section className="dash-main"><header className="dash-top"><div className="searchbox"><Search size={17}/><span>Gestão de Recursos Humanos</span></div><div className="top-actions"><span className="role-chip"><ShieldCheck size={14}/>{role}</span><div className="user-pill"><div className="user-avatar">{email.slice(0,1).toUpperCase()}</div><span>{email}</span></div></div></header>
+ <div className="dash-content"><div className="welcome-row"><div><div className="form-kicker">PAINEL DE CONTROLE</div><h1>Visão geral</h1><p>Bem-vindo ao ambiente de gestão de {company||"sua empresa"}.</p></div><div className="date-chip"><CalendarDays size={16}/>{new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}</div></div>
+ {trial&&<div className="setup-banner"><div className="setup-icon"><Activity/></div><div><b>Período de avaliação</b><p>Seu ambiente está em avaliação até {new Date(trial).toLocaleDateString("pt-BR")}.</p></div><span className="status-pill">AVALIAÇÃO</span></div>}
+ {error&&<div className="notice error">{error}</div>}
+ <div className="section-heading"><h2>Indicadores de RH</h2><span>Dados reais da sua organização</span></div><div className="metric-grid">
+ <div className="metric-card"><div className="metric-top"><span>Colaboradores cadastrados</span><Users size={19}/></div><strong>{counts.employees}</strong><small>Quadro funcional total</small></div>
+ <div className="metric-card"><div className="metric-top"><span>Colaboradores ativos</span><Activity size={19}/></div><strong>{counts.active}</strong><small>Vínculos ativos</small></div>
+ <div className="metric-card"><div className="metric-top"><span>Departamentos</span><Building2 size={19}/></div><strong>{counts.departments}</strong><small>Estrutura organizacional</small></div>
+ <div className="metric-card"><div className="metric-top"><span>Cargos cadastrados</span><BriefcaseBusiness size={19}/></div><strong>{counts.positions}</strong><small>Funções registradas</small></div></div>
+ <div className="section-heading"><h2>Acessos aos módulos</h2><span>Selecione uma área para trabalhar</span></div><div className="quick-grid">{shortcuts.map(item=><a href={item.href} className="quick-card" key={item.href}><div><item.icon size={20}/></div><b>{item.label}</b><span>{item.desc}</span><strong className="quick-count">{item.value} registro(s) <ArrowUpRight size={14}/></strong></a>)}</div>
+ <div className="setup-banner onboarding-tip"><div className="setup-icon"><ClipboardList/></div><div><b>Primeiros passos recomendados</b><p>1. Cadastre departamentos. 2. Cadastre cargos. 3. Registre os colaboradores e associe cada um à estrutura.</p></div></div>
+ <div className="footer-note">ESC Gestão de RH e DP <span>•</span> Ambiente protegido por permissões de acesso</div></div></section></main>;
 }
