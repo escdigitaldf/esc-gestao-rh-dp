@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useParams,useRouter} from "next/navigation";
-import {ArrowLeft,FileText,Upload,Download,Trash2,ShieldCheck,FolderOpen,FileCheck2,Search,AlertCircle} from "lucide-react";
+import {ArrowLeft,FileText,Upload,Download,Trash2,ShieldCheck,FolderOpen,FileCheck2,Search,AlertCircle,Printer} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 type Doc={id:string;category:string;title:string;description:string|null;original_filename:string;storage_path:string;mime_type:string;file_size:number;document_number:string|null;issue_date:string|null;expiry_date:string|null;is_confidential:boolean;created_at:string};
 type Employee={id:string;full_name:string;employee_code:string;cpf:string};
