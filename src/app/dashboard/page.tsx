@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {Activity,Bell,BriefcaseBusiness,CalendarDays,ChevronDown,ClipboardList,FileText,LayoutDashboard,LogOut,Search,Settings,Users,WalletCards,Building2,ArrowUpRight,ShieldCheck,Plane,Wallet,Settings} from "lucide-react";
+import {Activity,Bell,BriefcaseBusiness,CalendarDays,ChevronDown,ClipboardList,FileText,LayoutDashboard,LogOut,Search,Settings,Users,WalletCards,Building2,ArrowUpRight,ShieldCheck,Plane,Wallet} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 type Counts={employees:number;active:number;departments:number;positions:number};
 export default function Dashboard(){
