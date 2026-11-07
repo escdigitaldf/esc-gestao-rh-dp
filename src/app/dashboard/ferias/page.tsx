@@ -11,7 +11,8 @@ const today=()=>new Date().toISOString().slice(0,10);
 const initialPeriod={employee_id:"",acquisition_start:"",acquisition_end:"",concession_start:"",concession_end:"",entitled_days:"30",notes:""};
 const initialSchedule={employee_id:"",vacation_period_id:"",start_date:"",end_date:"",days:"",sold_days:"0",status:"requested",payment_date:"",notes:""};
 const initialAbsence={employee_id:"",absence_type:"medical",start_date:today(),end_date:"",status:"open",notes:""};
-const dateBR=(s:string|null)=>s?new Date(s+"T12:00:00").toLocaleDateString("pt-BR"):"—";\nconst moneyBR=(n:number)=>n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const dateBR=(s:string|null)=>s?new Date(s+"T12:00:00").toLocaleDateString("pt-BR"):"—";
+const moneyBR=(n:number)=>n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const employeeName=(id:string,emps:Emp[])=>{const e=emps.find(x=>x.id===id);return e?e.full_name+" · "+e.employee_code:"Colaborador";};
 function daysBetween(a:string,b:string){if(!a||!b)return "";const n=Math.floor((new Date(b+"T12:00:00").getTime()-new Date(a+"T12:00:00").getTime())/86400000)+1;return n>0?String(n):"";}
 export default function VacationManagement(){
