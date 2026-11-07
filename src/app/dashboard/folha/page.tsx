@@ -5,7 +5,8 @@ import {ArrowLeft,Plus,Search,Wallet,Users,CalendarDays,FileText,Lock,RefreshCw,
 import {createClient} from "@/lib/supabase/client";
 type Employee={id:string;employee_code:string;full_name:string;salary_amount:number|null;employment_status:string;admission_date:string|null};
 type Run={id:string;reference_month:string;payment_date:string|null;status:string;employee_count:number;total_earnings:number;total_deductions:number;total_net:number;notes:string|null};
-type Entry={id:string;employee_id:string;employee_code:string;employee_name:string;salary_base:number;gross_amount:number;deductions_amount:number;net_amount:number;status:string;notes:string|null};\ntype PayrollItem={id:string;payroll_entry_id:string;item_type:string;code:string;description:string;amount:number};
+type Entry={id:string;employee_id:string;employee_code:string;employee_name:string;salary_base:number;gross_amount:number;deductions_amount:number;net_amount:number;status:string;notes:string|null};
+type PayrollItem={id:string;payroll_entry_id:string;item_type:string;code:string;description:string;amount:number};
 const money=(n:number)=>Number(n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const monthLabel=(s:string)=>new Date(s+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const firstOfMonth=(s:string)=>s+"-01";
