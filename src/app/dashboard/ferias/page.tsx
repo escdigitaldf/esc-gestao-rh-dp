@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowLeft,CalendarDays,Plus,Search,Clock3,Plane,AlertTriangle,Pencil,Trash2,ShieldCheck,FileText,Sparkles} from "lucide-react";
+import {ArrowLeft,CalendarDays,Plus,Search,Clock3,Plane,AlertTriangle,Pencil,Trash2,ShieldCheck,FileText,Printer,Sparkles} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 type Emp={id:string;full_name:string;employee_code:string;cpf:string|null;admission_date:string|null;employment_type:string|null;employment_status:string;termination_date:string|null;salary_amount:number|null};
 type Period={id:string;employee_id:string;acquisition_start:string;acquisition_end:string;concession_start:string;concession_end:string;entitled_days:number;status:string;notes:string|null};
