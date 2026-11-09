@@ -7,7 +7,7 @@ type Employee={id:string;employee_code:string;full_name:string;salary_amount:num
 type Run={id:string;reference_month:string;payment_date:string|null;status:string;employee_count:number;total_earnings:number;total_deductions:number;total_net:number;notes:string|null};
 type Entry={id:string;employee_id:string;employee_code:string;employee_name:string;salary_base:number;gross_amount:number;deductions_amount:number;net_amount:number;status:string;notes:string|null};
 type PayrollItem={id:string;payroll_entry_id:string;item_type:string;code:string;description:string;amount:number};
-type VacationPreview={id:string;employee_id:string;start_date:string;end_date:string;days:number;sold_days:number;status:string;payment_date:string|null;salary_amount:number|null;salary_source:string};
+type VacationPreview={id:string;employee_id:string;start_date:string;end_date:string;days:number;sold_days:number;status:string;payment_date:string|null;salary_amount:number|null;salary_history_id:string|null;salary_source:string};
 type VacationReview={id:string;vacation_schedule_id:string;payroll_run_id:string;payroll_entry_id:string;employee_id:string;salary_history_id:string;reference_date:string;salary_amount:number;vacation_amount:number;vacation_third_amount:number;allowance_amount:number;allowance_third_amount:number;gross_total:number;status:string;reviewed_at:string};
 const money=(n:number)=>Number(n||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const monthLabel=(s:string)=>new Date(s+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
