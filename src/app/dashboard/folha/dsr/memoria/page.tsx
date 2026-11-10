@@ -17,7 +17,6 @@ const typeName=(v:string)=>({fixed_weekly:"Semanal fixa",rotating:"Revezamento",
 
 export default function DsrMemoryPage(){
  const router=useRouter();
- const [org,setOrg]=useState("");
  const [month,setMonth]=useState(new Date().toISOString().slice(0,7));
  const [employees,setEmployees]=useState<Employee[]>([]);
  const [schedules,setSchedules]=useState<Schedule[]>([]);
@@ -34,7 +33,6 @@ export default function DsrMemoryPage(){
   if(authError||!user){router.replace("/");return;}
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
-  setOrg(membership.organization_id);
   const start=month+"-01";
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const [emp,sch,occ,ev]=await Promise.all([
@@ -66,7 +64,6 @@ export default function DsrMemoryPage(){
    rejected:employeeOccurrences.filter(x=>x.record_status==="rejected").length};
  }),[employees,schedules,occurrences,events]);
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length}),[occurrences,schedules,events]);
- const moneyEvents=useMemo(()=>events.filter(x=>x.status==="approved").reduce((sum,x)=>sum+Number(x.amount||0),0),[events]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
  return <main className="module-shell">
