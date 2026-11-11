@@ -173,3 +173,22 @@
 .dsr-category-total small{max-width:560px}
 @media(max-width:850px){.dsr-category-calculation-grid{grid-template-columns:1fr}.dsr-category-calculation-fields{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:560px){.dsr-category-calculation-fields{grid-template-columns:1fr}.dsr-category-total{align-items:flex-start;flex-direction:column}}
+
+
+/* Versioned DSR category parameters */
+.dsr-category-parameters-panel{margin-top:16px;overflow:hidden}
+.dsr-category-parameters-panel>.employee-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid var(--border,#e5eaf0)}
+.dsr-category-parameters-panel .dsr-category-calculation-fields{padding:13px;background:var(--subtle,#f7f9fa);border:1px solid var(--border,#e5eaf0);border-radius:10px;margin:12px 0}
+.dsr-category-parameters-panel .dsr-category-calculation-fields button{justify-self:start;white-space:nowrap}
+.dsr-category-parameters-panel .dsr-category-justification{grid-column:1/-1}
+.dsr-category-parameters-panel .dsr-category-justification textarea{width:100%;min-height:76px;padding:9px;border:1px solid var(--border,#cbd5e1);border-radius:8px;background:var(--background,#fff);color:inherit;font:inherit;font-size:12px;resize:vertical}
+.dsr-category-parameters-panel .dsr-doc-version{align-items:flex-start}
+.dsr-category-parameters-panel .dsr-doc-version>div{gap:5px}
+.dsr-category-parameters-panel .dsr-doc-version span{line-height:1.55}
+.dsr-category-parameters-panel input:disabled,.dsr-category-parameters-panel select:disabled,.dsr-category-calculation-fields input:disabled,.dsr-category-calculation-fields select:disabled{opacity:.75;background:var(--subtle,#f1f5f9);cursor:not-allowed}
+@media(max-width:760px){
+ .dsr-category-parameters-panel>.employee-list-head{align-items:flex-start;flex-direction:column}
+ .dsr-category-parameters-panel .dsr-category-calculation-fields{grid-template-columns:1fr}
+ .dsr-category-parameters-panel .dsr-category-calculation-fields button{width:100%;justify-content:center}
+ .dsr-category-parameters-panel .dsr-doc-version{flex-wrap:wrap}
+}
