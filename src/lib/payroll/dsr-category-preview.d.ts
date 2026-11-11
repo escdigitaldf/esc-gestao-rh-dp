@@ -14,7 +14,7 @@ export interface DsrCategoryPreview {
   count: number;
   message: string;
   parameters?: { denominator: number; restUnits: number; unit: "days" | "hours" };
-  result?: Record<string, unknown>;
+  result?: { ok: boolean; amount?: number; audit?: { denominator: number; restUnits: number; unit: "days" | "hours" } };
 }
 export function calculateDsrCategoryPreviews(args?: {
   categories?: Partial<Record<DsrCategory, DsrCategoryInput>>;
