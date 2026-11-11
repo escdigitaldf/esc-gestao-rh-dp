@@ -118,7 +118,11 @@ export default function DsrMemoryPage(){
  }),[employees,schedules,occurrences,events,rules,month]);
  const previewEmployee=summaries.find(x=>x.employee.id===(previewEmployeeId||employees[0]?.id));
  const previewApprovedEvents=previewEmployee?.events.filter(x=>x.status==="approved"||x.status==="processed")||[];
- const previewBase=previewApprovedEvents.reduce((sum,x)=>sum+Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0))),0);
+ const eventValue=(x:VariableEvent)=>Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0)));
+ const previewEarnings=previewApprovedEvents.filter(x=>x.item_type==="earning");
+ const previewDeductions=previewApprovedEvents.filter(x=>x.item_type==="deduction");
+ const previewEmployerCharges=previewApprovedEvents.filter(x=>x.item_type==="employer_charge");
+ const previewBase=previewEarnings.reduce((sum,x)=>sum+eventValue(x),0);
  const previewResult=useMemo(()=>{
   if(!previewEmployee?.ready||previewDenominator.trim()===""||previewRestUnits.trim()==="")return null;
   return calculateDsrPreview({baseAmount:previewBase,denominator:Number(previewDenominator),restUnits:Number(previewRestUnits),unit:previewUnit,decimalPlaces:2});
@@ -156,7 +160,7 @@ export default function DsrMemoryPage(){
       <div><span>Resultado simulado</span><b>{previewResult?.ok?money(Number(previewResult.amount??0)):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
      </div>
      <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(previewDeductions.reduce((sum,x)=>sum+eventValue(x),0))}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(previewEmployerCharges.reduce((sum,x)=>sum+eventValue(x),0))}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{previewEmployee?.pendingEvents??0}</b><small>Não compõem a prévia</small></div></div>
-     {previewResult?.ok&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(previewResult.amount)}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
+     {previewResult?.ok&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(Number(previewResult.amount??0))}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
     </div>
    </section>
