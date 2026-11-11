@@ -153,9 +153,9 @@ export default function DsrMemoryPage(){
      <div className="dsr-preview-summary">
       <div><span>Base variável aprovada</span><b>{money(previewBase)}</b><small>{previewApprovedEvents.length} evento(s) aprovado(s)/processado(s)</small></div>
       <div><span>Condição operacional</span><b>{previewEmployee?.ready?"Dados operacionais completos":"Bloqueado para prévia"}</b><small>{previewEmployee?.ready?"Escala, regra e ocorrências passaram pelas verificações.":"Selecione colaborador com conferência operacional completa."}</small></div>
-      <div><span>Resultado simulado</span><b>{previewResult?.ok?money(previewResult.amount):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
+      <div><span>Resultado simulado</span><b>{previewResult?.ok?money(Number(previewResult.amount??0)):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
      </div>
-     {previewResult?.ok&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(previewResult.audit.baseAmount)} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(previewResult.amount)}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
+     {previewResult?.ok&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(previewResult.amount)}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
     </div>
    </section>
