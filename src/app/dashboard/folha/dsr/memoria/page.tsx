@@ -87,7 +87,7 @@ export default function DsrMemoryPage(){
   }
   const ruleOk=employeeSchedules.length>0&&employeeSchedules.every(schedule=>{
    const rule=rules.find(x=>x.id===schedule.dsr_rule_id);
-   if(!rule||rule.status!=="validated")return false;
+   if(!rule||rule.status!=="validated"||schedule.dsr_rule_status!=="validated")return false;
    const from=schedule.effective_from>monthStart?schedule.effective_from:monthStart;
    const to=schedule.effective_to&&schedule.effective_to<monthEnd?schedule.effective_to:monthEnd;
    return (!rule.validity_from||from>=rule.validity_from)&&(!rule.validity_to||to<=rule.validity_to);
