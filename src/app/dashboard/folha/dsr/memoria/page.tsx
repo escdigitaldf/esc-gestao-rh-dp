@@ -4,12 +4,13 @@ import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 import {calculateDsrPreview} from "@/lib/payroll/dsr-calculator.mjs";
+import {summarizeDsrRemuneration} from "@/lib/payroll/dsr-remuneration.mjs";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
 type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
-type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:"earning"|"deduction"|"employer_charge";dsr_category:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null};
+type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:"earning"|"deduction"|"employer_charge";dsr_category:string;affects_dsr:boolean;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
 
 const monthEndDate=(v:string)=>new Date(Date.UTC(Number(v.slice(0,4)),Number(v.slice(5,7)),0)).toISOString().slice(0,10);
@@ -47,7 +48,7 @@ export default function DsrMemoryPage(){
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,dsr_rule_id,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
-   s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,dsr_category,amount,quantity,unit_value,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
+   s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,dsr_category,affects_dsr,amount,quantity,unit_value,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
    s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to,calculation_method,calculation_parameters").eq("organization_id",membership.organization_id)
   ]);
   const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error;
@@ -117,13 +118,13 @@ export default function DsrMemoryPage(){
    missingDays,ruleOk,overlapDays,pendingEvents,ready:blockers.length===0,blockers};
  }),[employees,schedules,occurrences,events,rules,month]);
  const previewEmployee=summaries.find(x=>x.employee.id===(previewEmployeeId||employees[0]?.id));
- const previewApprovedEvents=previewEmployee?.events.filter(x=>x.status==="approved"||x.status==="processed")||[];
  const eventValue=(x:VariableEvent)=>Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0)));
- const previewEarnings=previewApprovedEvents.filter(x=>x.item_type==="earning");
- const previewDeductions=previewApprovedEvents.filter(x=>x.item_type==="deduction");
- const previewEmployerCharges=previewApprovedEvents.filter(x=>x.item_type==="employer_charge");
- const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:previewEarnings.filter(x=>x.dsr_category===category).reduce((sum,x)=>sum+eventValue(x),0)}));
- const previewBase=previewEarnings.reduce((sum,x)=>sum+eventValue(x),0);
+ const remuneration=useMemo(()=>summarizeDsrRemuneration(previewEmployee?.events||[]),[previewEmployee?.events]);
+ const previewEarnings=remuneration.earnings;
+ const previewDeductions=remuneration.deductions;
+ const previewEmployerCharges=remuneration.employerCharges;
+ const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:remuneration.categories[category as keyof typeof remuneration.categories].amount}));
+ const previewBase=remuneration.earningsTotal;
  const previewResult=useMemo(()=>{
   if(!previewEmployee?.ready||previewDenominator.trim()===""||previewRestUnits.trim()==="")return null;
   return calculateDsrPreview({baseAmount:previewBase,denominator:Number(previewDenominator),restUnits:Number(previewRestUnits),unit:previewUnit,decimalPlaces:2});
@@ -161,7 +162,7 @@ export default function DsrMemoryPage(){
       <div><span>Resultado simulado</span><b>{previewResult?.ok?money(Number(previewResult.amount??0)):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
      </div>
      <div className="dsr-preview-category-grid">{dsrCategoryTotals.map(group=><div key={group.category}><span>{({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios / gratificações",other:"Outros proventos"} as Record<string,string>)[group.category]}</span><b>{money(group.amount)}</b><small>{group.events.length} evento(s) · incluídos na base candidata</small></div>)}</div>
-     <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(previewDeductions.reduce((sum,x)=>sum+eventValue(x),0))}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(previewEmployerCharges.reduce((sum,x)=>sum+eventValue(x),0))}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{previewEmployee?.pendingEvents??0}</b><small>Não compõem a prévia</small></div></div>
+     <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(remuneration.deductionsTotal)}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(remuneration.employerChargesTotal)}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{remuneration.pending.length}</b><small>Não compõem a prévia</small></div></div>
      {previewResult?.ok&&previewResult.audit&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(Number(previewResult.amount??0))}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
     </div>
