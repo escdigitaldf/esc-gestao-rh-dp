@@ -143,7 +143,9 @@ export default function DsrRulesPage(){
     organization_id:org,dsr_rule_id:rule.id,category:input.category,unit:input.unit,
     denominator,rest_units:restUnits,effective_from:input.from,effective_to:input.to||null,
     justification:input.justification.trim(),source_reference:input.sourceReference.trim()||null,
-    source_document_id:input.sourceDocumentId||null,status:"pending_validation",created_by:user.id
+    source_document_id:input.sourceDocumentId||null,
+    supersedes_id:categoryParameters.filter(p=>p.dsr_rule_id===rule.id&&p.category===input.category).sort((x,y)=>y.version-x.version)[0]?.id||null,
+    status:"pending_validation",created_by:user.id
    });
    if(insertError)throw insertError;
    setSuccess("Parâmetro registrado como pendente. Ele ainda não será utilizado como referência validada.");
