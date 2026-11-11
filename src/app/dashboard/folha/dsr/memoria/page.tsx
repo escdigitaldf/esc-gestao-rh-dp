@@ -5,10 +5,11 @@ import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "
 import {createClient} from "@/lib/supabase/client";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
-type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null};
+type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
+type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number;status:string;event_date:string|null};
-type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
+type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -22,6 +23,7 @@ export default function DsrMemoryPage(){
  const [schedules,setSchedules]=useState<Schedule[]>([]);
  const [occurrences,setOccurrences]=useState<Occurrence[]>([]);
  const [events,setEvents]=useState<VariableEvent[]>([]);
+ const [rules,setRules]=useState<DsrRule[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
@@ -35,18 +37,20 @@ export default function DsrMemoryPage(){
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev]=await Promise.all([
+  const [emp,sch,occ,ev,ruleRows]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
-   s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
+   s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,dsr_rule_id,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
-   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved"]).order("event_date")
+   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
+   s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to").eq("organization_id",membership.organization_id)
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
   setOccurrences((occ.data||[]) as Occurrence[]);
   setEvents((ev.data||[]) as VariableEvent[]);
+  setRules((ruleRows.data||[]) as DsrRule[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -56,39 +60,80 @@ export default function DsrMemoryPage(){
   const employeeSchedules=schedules.filter(x=>x.employee_id===employee.id);
   const employeeOccurrences=occurrences.filter(x=>x.employee_id===employee.id);
   const employeeEvents=events.filter(x=>x.employee_id===employee.id);
+  const monthStart=month+"-01";
+  const monthEnd=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  const expectedByDate=new Map<string,string[]>();
+  for(const schedule of employeeSchedules){
+   const from=schedule.effective_from>monthStart?schedule.effective_from:monthStart;
+   const to=schedule.effective_to&&schedule.effective_to<monthEnd?schedule.effective_to:monthEnd;
+   if(to<from)continue;
+   const cursor=new Date(from+"T12:00:00");
+   const last=new Date(to+"T12:00:00");
+   while(cursor<=last){
+    const day=cursor.toISOString().slice(0,10);
+    expectedByDate.set(day,[...(expectedByDate.get(day)||[]),schedule.id]);
+    cursor.setDate(cursor.getDate()+1);
+   }
+  }
+  const validatedByDate=new Map<string,Occurrence[]>();
+  employeeOccurrences.filter(x=>x.record_status==="validated").forEach(x=>{
+   validatedByDate.set(x.occurrence_date,[...(validatedByDate.get(x.occurrence_date)||[]),x]);
+  });
+  let missingDays=0,overlapDays=0;
+  for(const [day,expectedSchedules] of expectedByDate){
+   const validatedRows=validatedByDate.get(day)||[];
+   if(expectedSchedules.length!==1){overlapDays++;continue;}
+   if(validatedRows.length!==1||validatedRows[0].work_schedule_id!==expectedSchedules[0])missingDays++;
+  }
+  const ruleOk=employeeSchedules.length>0&&employeeSchedules.every(schedule=>{
+   const rule=rules.find(x=>x.id===schedule.dsr_rule_id);
+   if(!rule||rule.status!=="validated")return false;
+   const from=schedule.effective_from>monthStart?schedule.effective_from:monthStart;
+   const to=schedule.effective_to&&schedule.effective_to<monthEnd?schedule.effective_to:monthEnd;
+   return (!rule.validity_from||from>=rule.validity_from)&&(!rule.validity_to||to<=rule.validity_to);
+  });
+  const pendingEvents=employeeEvents.filter(x=>x.status==="pending").length;
+  const draft=employeeOccurrences.filter(x=>x.record_status==="draft").length;
+  const rejected=employeeOccurrences.filter(x=>x.record_status==="rejected").length;
+  const blockers:string[]=[];
+  if(!employeeSchedules.length)blockers.push("Sem escala vigente");
+  if(!ruleOk)blockers.push("Regra normativa ausente, pendente ou fora da vigência");
+  if(overlapDays)blockers.push(overlapDays+" dia(s) com sobreposição de escalas");
+  if(missingDays)blockers.push(missingDays+" dia(s) sem apontamento diário validado");
+  if(draft)blockers.push(draft+" ocorrência(s) em rascunho");
+  if(rejected)blockers.push(rejected+" ocorrência(s) rejeitada(s) sem substituição validada");
+  if(pendingEvents)blockers.push(pendingEvents+" evento(s) variável(is) pendente(s)");
   return {employee,schedules:employeeSchedules,occurrences:employeeOccurrences,events:employeeEvents,
    scheduled:employeeOccurrences.filter(x=>x.record_status==="validated").reduce((a,x)=>a+Number(x.scheduled_hours||0),0),
    worked:employeeOccurrences.filter(x=>x.record_status==="validated").reduce((a,x)=>a+Number(x.worked_hours||0),0),
-   draft:employeeOccurrences.filter(x=>x.record_status==="draft").length,
-   validated:employeeOccurrences.filter(x=>x.record_status==="validated").length,
-   rejected:employeeOccurrences.filter(x=>x.record_status==="rejected").length};
- }),[employees,schedules,occurrences,events]);
- const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length}),[occurrences,schedules,events]);
+   draft,validated:employeeOccurrences.filter(x=>x.record_status==="validated").length,rejected,
+   missingDays,ruleOk,overlapDays,pendingEvents,ready:blockers.length===0,blockers};
+ }),[employees,schedules,occurrences,events,rules,month]);
+ const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved"||x.status==="processed").length,pendingEvents:events.filter(x=>x.status==="pending").length,readyEmployees:summaries.filter(x=>x.ready).length,blockedEmployees:summaries.filter(x=>!x.ready).length}),[occurrences,schedules,events,summaries]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
  return <main className="module-shell">
   <header className="module-top"><a href="/dashboard/folha/dsr"><ArrowLeft size={16}/> Jornadas e DSR</a><b><span className="brand-mark">ESC</span> Gestão de RH e DP</b><span>Memória preliminar</span></header>
   <section className="module-content payroll-content">
-   <div className="module-heading"><div><div className="form-kicker">DEPARTAMENTO PESSOAL · CONFERÊNCIA</div><h1>Memória preliminar do DSR</h1><p>Consolidação operacional por colaborador, antes da apuração financeira.</p></div><div className="salary-history-icon"><ClipboardList size={24}/></div></div>
+   <div className="module-heading"><div><div className="form-kicker">DEPARTAMENTO PESSOAL · CONFERÊNCIA</div><h1>Memória preliminar do DSR</h1><p>Conferência de cobertura diária, vigência normativa e eventos variáveis antes da apuração financeira.</p></div><div className="salary-history-icon"><ClipboardList size={24}/></div></div>
    {error&&<div className="notice error">{error}</div>}
-   <div className="dependent-privacy"><ShieldAlert size={17}/><span><b>Prévia sem lançamento financeiro.</b> Esta tela consolida apontamentos validados e eventos com incidência de DSR. Não calcula valor, não cria rubrica e não altera a folha. A apuração permanece bloqueada até validação da regra legal/coletiva e da escala.</span></div>
+   <div className="dependent-privacy"><ShieldAlert size={17}/><span><b>Prévia sem lançamento financeiro.</b> A tela identifica cobertura diária incompleta, sobreposição de escalas, regras sem validação e eventos pendentes. Ainda não calcula valores nem altera a folha. “Dados completos” significa apenas que os cadastros passaram pelas verificações operacionais; a fórmula do DSR ainda depende de parametrização normativa validada.</span></div>
    <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Competência analisada</h2><p>{monthName(month)}</p></div><label>Competência<input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><button className="employee-secondary" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button></div></div>
    <div className="employee-stats payroll-stats">
     <div><span>Ocorrências validadas</span><b>{totals.validated}</b></div>
     <div><span>Pendentes de validação</span><b>{totals.draft}</b></div>
     <div><span>Escalas sem regra validada</span><b>{totals.unvalidatedSchedules}</b></div>
     <div><span>Eventos com incidência DSR</span><b>{totals.dsrEvents}</b></div>
+    <div><span>Prontos para análise técnica</span><b>{totals.readyEmployees}</b></div>
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Consolidação por colaborador</h2><p>Horas abaixo consideram somente ocorrências validadas.</p></div><span>{summaries.length} colaborador(es)</span></div>
     {!summaries.length?<div className="employee-empty"><CalendarDays size={22}/><b>Nenhum colaborador cadastrado</b><p>Cadastre colaboradores para iniciar a conferência de jornadas.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Escala vigente</th><th>Ocorrências</th><th>Horas previstas validadas</th><th>Horas trabalhadas validadas</th><th>Eventos DSR aprovados</th><th>Condição</th></tr></thead><tbody>
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Escala vigente</th><th>Ocorrências</th><th>Horas previstas validadas</th><th>Horas trabalhadas validadas</th><th>Eventos DSR aprovados</th><th>Conferência de dados</th></tr></thead><tbody>
      {summaries.map(row=>{
-      const approved=row.events.filter(x=>x.status==="approved");
+      const approved=row.events.filter(x=>x.status==="approved"||x.status==="processed");
       const pending=row.events.filter(x=>x.status==="pending");
-      const scheduleOk=row.schedules.length>0&&row.schedules.every(x=>x.dsr_rule_status==="validated");
-      const hasDraft=row.draft>0;
-      const condition=!scheduleOk?"Regra/escala pendente":hasDraft?"Apontamentos pendentes":approved.length?"Evento DSR requer apuração":"Aguardando validação DP";
+      const condition=row.ready?"Dados completos — aguarda fórmula validada":row.blockers.join(" · ");
       return <tr key={row.employee.id}>
        <td><b>{row.employee.full_name}</b><br/><small>{row.employee.employee_code}</small></td>
        <td>{row.schedules.length?row.schedules.map(x=><div key={x.id}>{x.schedule_name}<br/><small>{typeName(x.schedule_type)} · {x.dsr_rule_status==="validated"?"Regra validada":"Regra pendente"}</small></div>):"Sem escala"}</td>
@@ -105,7 +150,7 @@ export default function DsrMemoryPage(){
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Valor do evento</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{money(Number(x.amount||0))}</td><td>{x.status==="approved"?"Aprovado":"Pendente"}</td></tr>)}</tbody></table></div>}
    </div>
-   <div className="dependent-privacy"><Clock size={16}/><span>Atualizado em {refreshed||"—"}. Próxima etapa: vincular a regra do DSR à convenção/acordo coletivo aplicável e ao regime de jornada, validar a cobertura diária e somente então liberar o cálculo financeiro e a integração atômica com a folha.</span></div>
+   <div className="dependent-privacy"><Clock size={16}/><span>Atualizado em {refreshed||"—"}. A conferência considera um apontamento diário validado para cada data coberta pela escala. Isso não substitui a validação da fórmula legal/coletiva. Próxima etapa: definir critérios financeiros por regra validada, criar casos de teste e só depois integrar à folha.</span></div>
   </section>
  </main>;
 }
