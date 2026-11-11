@@ -82,10 +82,10 @@ begin
         raise exception 'Informe a duração e o padrão do ciclo da jornada.';
       end if;
       select count(*) into v_pattern_count from jsonb_array_elements(new.cycle_pattern);
-      select count(*) into v_work_count from jsonb_array_elements_text(new.cycle_pattern) p where p in ('work','rest') and p = 'work';
-      select count(*) into v_rest_count from jsonb_array_elements_text(new.cycle_pattern) p where p in ('work','rest') and p = 'rest';
+      select count(*) into v_work_count from jsonb_array_elements_text(new.cycle_pattern) as x(value) where x.value = 'work';
+      select count(*) into v_rest_count from jsonb_array_elements_text(new.cycle_pattern) as x(value) where x.value = 'rest';
       if v_pattern_count <> new.cycle_days or v_work_count = 0 or v_rest_count = 0 or
-         exists (select 1 from jsonb_array_elements_text(new.cycle_pattern) p where p not in ('work','rest')) then
+         exists (select 1 from jsonb_array_elements_text(new.cycle_pattern) as x(value) where x.value not in ('work','rest')) then
         raise exception 'O padrão do ciclo deve ter exatamente a quantidade de dias informada e conter somente trabalho (T) ou repouso (R), com ambos presentes.';
       end if;
     end if;
