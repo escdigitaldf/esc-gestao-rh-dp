@@ -141,3 +141,6 @@
 .dsr-preview-category-grid small{font-size:7px;color:#829794;line-height:1.4}
 @media(max-width:850px){.dsr-preview-category-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:560px){.dsr-preview-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.rubric-category-select{max-width:165px;padding:7px 8px;border:1px solid #dfe7eb;border-radius:7px;background:#fff;color:#42596a;font:9px 'DM Sans',sans-serif}
+.rubric-category-select:focus{outline:none;border-color:#0b9589;box-shadow:0 0 0 2px #0b958918}
