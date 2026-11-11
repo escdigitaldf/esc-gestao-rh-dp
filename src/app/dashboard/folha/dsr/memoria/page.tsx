@@ -8,7 +8,7 @@ type Employee={id:string;employee_code:string;full_name:string;employment_status
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
 type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null;calculation_method:string|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
-type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number;status:string;event_date:string|null};
+type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
 
 const monthEndDate=(v:string)=>new Date(Date.UTC(Number(v.slice(0,4)),Number(v.slice(5,7)),0)).toISOString().slice(0,10);
@@ -42,7 +42,7 @@ export default function DsrMemoryPage(){
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,dsr_rule_id,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
-   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
+   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,quantity,unit_value,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
    s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to,calculation_method").eq("organization_id",membership.organization_id)
   ]);
   const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error;
@@ -140,7 +140,7 @@ export default function DsrMemoryPage(){
        <td>{row.schedules.length?row.schedules.map(x=><div key={x.id}>{x.schedule_name}<br/><small>{typeName(x.schedule_type)} · {x.dsr_rule_status==="validated"?"Regra validada":"Regra pendente"}</small></div>):"Sem escala"}</td>
        <td>{row.validated} validadas · {row.draft} rascunhos · {row.rejected} rejeitadas</td>
        <td>{hours(row.scheduled)}</td><td>{hours(row.worked)}</td>
-       <td>{approved.length} aprovados{pending.length?" · "+pending.length+" pendentes":""}{approved.length>0&&<small><br/>Base informativa: {money(approved.reduce((a,x)=>a+Number(x.amount||0),0))}</small>}</td>
+       <td>{approved.length} aprovados{pending.length?" · "+pending.length+" pendentes":""}{approved.length>0&&<small><br/>Base informativa: {money(approved.reduce((a,x)=>a+Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0))),0))}</small>}</td>
        <td><span className="status-pill">{condition}</span></td>
       </tr>;
      })}
@@ -149,7 +149,7 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Eventos variáveis com incidência de DSR</h2><p>Valores são exibidos apenas para conferência da base informativa; não representam DSR calculado.</p></div><span>{events.length} evento(s)</span></div>
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Valor do evento</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{money(Number(x.amount||0))}</td><td>{({pending:"Pendente",approved:"Aprovado",rejected:"Rejeitado",processed:"Processado"} as Record<string,string>)[x.status]||x.status}</td></tr>)}</tbody></table></div>}
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Valor do evento</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{money(Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0))))}</td><td>{({pending:"Pendente",approved:"Aprovado",rejected:"Rejeitado",processed:"Processado"} as Record<string,string>)[x.status]||x.status}</td></tr>)}</tbody></table></div>}
    </div>
    <div className="dependent-privacy"><Clock size={16}/><span>Atualizado em {refreshed||"—"}. A conferência considera um apontamento diário validado para cada data coberta pela escala. Isso não substitui a validação da fórmula legal/coletiva. Próxima etapa: definir critérios financeiros por regra validada, criar casos de teste e só depois integrar à folha.</span></div>
   </section>
