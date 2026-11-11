@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {calculateDsrPreview} from "@/lib/payroll/dsr-calculator.mjs";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
@@ -28,6 +29,10 @@ export default function DsrMemoryPage(){
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
+ const [previewEmployeeId,setPreviewEmployeeId]=useState("");
+ const [previewDenominator,setPreviewDenominator]=useState("");
+ const [previewRestUnits,setPreviewRestUnits]=useState("");
+ const [previewUnit,setPreviewUnit]=useState<"days"|"hours">("days");
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
@@ -111,6 +116,13 @@ export default function DsrMemoryPage(){
    draft,validated:employeeOccurrences.filter(x=>x.record_status==="validated").length,rejected,
    missingDays,ruleOk,overlapDays,pendingEvents,ready:blockers.length===0,blockers};
  }),[employees,schedules,occurrences,events,rules,month]);
+ const previewEmployee=summaries.find(x=>x.employee.id===(previewEmployeeId||employees[0]?.id));
+ const previewApprovedEvents=previewEmployee?.events.filter(x=>x.status==="approved"||x.status==="processed")||[];
+ const previewBase=previewApprovedEvents.reduce((sum,x)=>sum+Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0))),0);
+ const previewResult=useMemo(()=>{
+  if(!previewEmployee?.ready||previewDenominator.trim()===""||previewRestUnits.trim()==="")return null;
+  return calculateDsrPreview({baseAmount:previewBase,denominator:Number(previewDenominator),restUnits:Number(previewRestUnits),unit:previewUnit,decimalPlaces:2});
+ },[previewEmployee?.ready,previewDenominator,previewRestUnits,previewBase,previewUnit]);
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved"||x.status==="processed").length,pendingEvents:events.filter(x=>x.status==="pending").length,readyEmployees:summaries.filter(x=>x.ready).length,blockedEmployees:summaries.filter(x=>!x.ready).length}),[occurrences,schedules,events,summaries]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
@@ -128,6 +140,25 @@ export default function DsrMemoryPage(){
     <div><span>Eventos com incidência DSR</span><b>{totals.dsrEvents}</b></div>
     <div><span>Prontos para análise técnica</span><b>{totals.readyEmployees}</b></div>
    </div>
+   <section className="employee-list-card payroll-list dsr-preview-panel">
+    <div className="employee-list-head"><div><h2>Simulação controlada do DSR</h2><p>Prévia matemática sobre eventos variáveis aprovados/processados, com parâmetros informados manualmente.</p></div><span className="dsr-private-tag">PREVIEW · NÃO INTEGRA A FOLHA</span></div>
+    <div className="dsr-preview-body">
+     <div className="dsr-preview-warning"><ShieldAlert size={16}/><span>O sistema não presume divisor legal, quantidade de repousos, feriados ou natureza de rubricas. Confirme os parâmetros na regra normativa validada antes de utilizar qualquer resultado.</span></div>
+     <div className="dsr-preview-fields">
+      <label>Colaborador<select value={previewEmployee?.employee.id||""} onChange={e=>setPreviewEmployeeId(e.target.value)}><option value="">Selecione</option>{employees.map(e=><option key={e.id} value={e.id}>{e.full_name} · {e.employee_code}</option>)}</select></label>
+      <label>Unidade de apuração<select value={previewUnit} onChange={e=>setPreviewUnit(e.target.value as "days"|"hours")}><option value="days">Dias</option><option value="hours">Horas</option></select></label>
+      <label>Denominador da regra<input type="number" min="0.01" step="0.01" value={previewDenominator} onChange={e=>setPreviewDenominator(e.target.value)} placeholder={previewUnit==="days"?"Ex.: dias elegíveis":"Ex.: horas elegíveis"}/></label>
+      <label>Repousos / unidades aplicáveis<input type="number" min="0" step="0.01" value={previewRestUnits} onChange={e=>setPreviewRestUnits(e.target.value)} placeholder="Informe conforme a regra"/></label>
+     </div>
+     <div className="dsr-preview-summary">
+      <div><span>Base variável aprovada</span><b>{money(previewBase)}</b><small>{previewApprovedEvents.length} evento(s) aprovado(s)/processado(s)</small></div>
+      <div><span>Condição operacional</span><b>{previewEmployee?.ready?"Dados operacionais completos":"Bloqueado para prévia"}</b><small>{previewEmployee?.ready?"Escala, regra e ocorrências passaram pelas verificações.":"Selecione colaborador com conferência operacional completa."}</small></div>
+      <div><span>Resultado simulado</span><b>{previewResult?.ok?money(previewResult.amount):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
+     </div>
+     {previewResult?.ok&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(previewResult.audit.baseAmount)} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(previewResult.amount)}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
+     {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
+    </div>
+   </section>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Consolidação por colaborador</h2><p>Horas abaixo consideram somente ocorrências validadas.</p></div><span>{summaries.length} colaborador(es)</span></div>
     {!summaries.length?<div className="employee-empty"><CalendarDays size={22}/><b>Nenhum colaborador cadastrado</b><p>Cadastre colaboradores para iniciar a conferência de jornadas.</p></div>:
