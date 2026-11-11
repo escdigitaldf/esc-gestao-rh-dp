@@ -96,7 +96,10 @@ export default function DsrRulesPage(){
     file_size:file.size,document_version:1,uploaded_by:user?.id,storage_path:storagePath,notes:documentNotes[rule.id]?.trim()||null
    });
    if(insertError){
-    await s.storage.from(BUCKET).remove([storagePath]);
+    const {error:cleanupError}=await s.storage.from(BUCKET).remove([storagePath]);
+    if(cleanupError){
+     throw new Error(insertError.message+" O cadastro falhou e a limpeza automática do arquivo também não foi confirmada. Solicite verificação técnica para evitar um arquivo órfão.");
+    }
     throw insertError;
    }
    setSelectedFiles(current=>({...current,[rule.id]:null}));
@@ -149,7 +152,7 @@ export default function DsrRulesPage(){
       return <article className="dsr-rule-doc-card" key={rule.id}>
        <div className="dsr-rule-doc-title"><div><b>{rule.rule_name}</b><span>{sourceLabel(rule.source_type)} · {rule.professional_category||"Categoria não informada"}</span></div><span className="status-pill">{ruleDocs.length} {ruleDocs.length===1?"arquivo":"arquivos"}</span></div>
        <div className="dsr-upload-grid">
-        <label className="dsr-file-picker">Arquivo PDF (máximo 15 MB)<input type="file" accept="application/pdf,.pdf" onChange={e=>setSelectedFiles(current=>({...current,[rule.id]:e.target.files?.[0]||null}))}/></label>
+        <label className="dsr-file-picker">Arquivo PDF (máximo 15 MB)<input key={selectedFiles[rule.id]?.name||"empty"} type="file" accept="application/pdf,.pdf" onChange={e=>setSelectedFiles(current=>({...current,[rule.id]:e.target.files?.[0]||null}))}/></label>
         <label>Observação do anexo<input value={documentNotes[rule.id]||""} onChange={e=>setDocumentNotes(current=>({...current,[rule.id]:e.target.value}))} placeholder="Ex.: CCT 2026/2027 — íntegra assinada"/></label>
         <button className="employee-primary" disabled={uploading===rule.id||!selectedFiles[rule.id]} onClick={()=>void uploadDocument(rule)}><Upload size={14}/>{uploading===rule.id?"Enviando...":"Anexar nova versão"}</button>
        </div>
