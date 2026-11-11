@@ -6,7 +6,7 @@ import {createClient} from "@/lib/supabase/client";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
-type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null;calculation_method:string|null};
+type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
@@ -43,7 +43,7 @@ export default function DsrMemoryPage(){
    s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,dsr_rule_id,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,code,description,amount,quantity,unit_value,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
-   s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to,calculation_method").eq("organization_id",membership.organization_id)
+   s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to,calculation_method,calculation_parameters").eq("organization_id",membership.organization_id)
   ]);
   const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error;
   if(issue)setError(issue.message);
@@ -88,7 +88,8 @@ export default function DsrMemoryPage(){
   }
   const ruleOk=employeeSchedules.length>0&&employeeSchedules.every(schedule=>{
    const rule=rules.find(x=>x.id===schedule.dsr_rule_id);
-   if(!rule||rule.status!=="validated"||schedule.dsr_rule_status!=="validated"||!rule.calculation_method)return false;
+   const divisor=Number(rule?.calculation_parameters?.divisor??30);
+   if(!rule||rule.status!=="validated"||schedule.dsr_rule_status!=="validated"||!rule.calculation_method||!Number.isFinite(divisor)||divisor<=0||divisor>31)return false;
    const from=schedule.effective_from>monthStart?schedule.effective_from:monthStart;
    const to=schedule.effective_to&&schedule.effective_to<monthEnd?schedule.effective_to:monthEnd;
    return (!rule.validity_from||from>=rule.validity_from)&&(!rule.validity_to||to<=rule.validity_to);
