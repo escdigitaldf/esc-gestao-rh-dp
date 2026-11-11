@@ -72,3 +72,38 @@
 .vacation-deadline-row>span{font-size:8px;font-weight:700;color:#667b88}.vacation-deadline-row>strong{font-size:9px;color:#354f60}
 .vacation-deadline-row.warning>span{color:#a87523}.vacation-deadline-row.urgent>span,.vacation-deadline-row.overdue>span{color:#bd5555}
 @media(max-width:760px){.vacation-auto-panel{align-items:stretch;flex-direction:column}.vacation-auto-panel>button{width:100%;min-width:0}.vacation-section-title{flex-wrap:wrap}.vacation-section-title span{width:100%;margin-left:25px}.vacation-deadline-row{grid-template-columns:1fr auto;gap:6px}.vacation-deadline-row>span{grid-column:1}.vacation-deadline-row>strong{grid-column:2;grid-row:1/3}}
+
+
+/* DSR rule documents */
+.dsr-documents-panel{margin-top:16px;overflow:hidden}
+.dsr-documents-panel>.employee-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid #edf1f3}
+.dsr-private-tag{font-size:8px;font-weight:800;letter-spacing:.8px;color:#087f75;background:#eaf7f4;border:1px solid #d8eee8;border-radius:20px;padding:7px 10px;white-space:nowrap}
+.dsr-rule-doc-list{display:grid;gap:0}
+.dsr-rule-doc-card{padding:17px 18px;border-bottom:1px solid #edf1f3}
+.dsr-rule-doc-card:last-child{border-bottom:0}
+.dsr-rule-doc-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.dsr-rule-doc-title>div{display:grid;gap:5px;min-width:0}
+.dsr-rule-doc-title b{font:800 11px Manrope;color:#30475a}
+.dsr-rule-doc-title>div span{font-size:9px;color:#84939e}
+.dsr-upload-grid{display:grid;grid-template-columns:minmax(180px,1fr) minmax(180px,1fr) auto;align-items:end;gap:10px;padding:12px;background:#f7f9fa;border:1px solid #e9eef1;border-radius:9px}
+.dsr-upload-grid label{display:block;margin:0;font-size:9px;font-weight:700;color:#526777;min-width:0}
+.dsr-upload-grid input{display:block;width:100%;margin-top:6px;padding:8px;border:1px solid #dfe7eb;border-radius:7px;background:#fff;font:9px 'DM Sans',sans-serif;color:#526777}
+.dsr-upload-grid input[type=file]{font-size:8px;padding:7px}
+.dsr-upload-grid button{white-space:nowrap;padding:10px 12px;font-size:9px}
+.dsr-no-docs{font-size:9px;color:#97a3ab;margin:12px 2px 2px}
+.dsr-doc-version-list{display:grid;margin-top:10px}
+.dsr-doc-version{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid #edf1f3}
+.dsr-doc-version>svg{color:#0b9489;flex-shrink:0}
+.dsr-doc-version>div{display:grid;gap:4px;min-width:0;flex:1}
+.dsr-doc-version b{font-size:9px;color:#40576a;overflow-wrap:anywhere}
+.dsr-doc-version span{font-size:8px;color:#87959e;line-height:1.5}
+.dsr-doc-version button{white-space:nowrap;font-size:8px;padding:7px 9px}
+@media(max-width:760px){
+ .dsr-documents-panel>.employee-list-head{align-items:flex-start;flex-direction:column}
+ .dsr-upload-grid{grid-template-columns:1fr}
+ .dsr-upload-grid button{width:100%;justify-content:center}
+ .dsr-rule-doc-title{align-items:flex-start}
+ .dsr-doc-version{align-items:flex-start;flex-wrap:wrap}
+ .dsr-doc-version>div{flex-basis:calc(100% - 30px)}
+ .dsr-doc-version button{margin-left:27px}
+}
