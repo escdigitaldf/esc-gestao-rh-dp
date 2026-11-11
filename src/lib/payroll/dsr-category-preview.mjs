@@ -20,7 +20,7 @@ export function calculateDsrCategoryPreviews({ categories = {}, parameters = {} 
     const input = parameters[category] || {};
     if (input.denominator === undefined || String(input.denominator).trim() === "" ||
         input.restUnits === undefined || String(input.restUnits).trim() === "" ||
-        (input.unit !== "days" && input.unit !== "hours")) {
+        input.unit === undefined || String(input.unit).trim() === "") {
       return [category, { status: "incomplete", baseAmount, count, message: "Informe denominador, repousos/unidades e unidade para esta categoria." }];
     }
     const result = calculateDsrPreview({
