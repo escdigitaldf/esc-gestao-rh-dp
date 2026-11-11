@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowLeft,CalendarDays,Clock,Plus,ShieldAlert,ClipboardList} from "lucide-react";
+import {ArrowLeft,BookOpen,CalendarDays,Clock,Plus,ShieldAlert,ClipboardList} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 type Employee={id:string;employee_code:string;full_name:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;work_days:number[];weekly_rest_days:number[];weekly_hours:number|null;cycle_days:number|null;dsr_rule_status:string};
