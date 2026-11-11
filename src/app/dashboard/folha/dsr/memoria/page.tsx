@@ -11,6 +11,7 @@ type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:s
 type DsrRule={id:string;rule_name:string;status:string;validity_from:string|null;validity_to:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:"earning"|"deduction"|"employer_charge";dsr_category:string;affects_dsr:boolean;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null};
+type CategoryParameter={id:string;organization_id:string;dsr_rule_id:string;category:string;unit:"days"|"hours";denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;version:number;validated_by:string|null;validated_at:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
 
 const monthEndDate=(v:string)=>new Date(Date.UTC(Number(v.slice(0,4)),Number(v.slice(5,7)),0)).toISOString().slice(0,10);
@@ -27,6 +28,7 @@ export default function DsrMemoryPage(){
  const [occurrences,setOccurrences]=useState<Occurrence[]>([]);
  const [events,setEvents]=useState<VariableEvent[]>([]);
  const [rules,setRules]=useState<DsrRule[]>([]);
+ const [categoryParameters,setCategoryParameters]=useState<CategoryParameter[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
@@ -49,13 +51,15 @@ export default function DsrMemoryPage(){
    s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,dsr_category,affects_dsr,amount,quantity,unit_value,status,event_date").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).order("event_date"),
    s.from("organization_dsr_rules").select("id,rule_name,status,validity_from,validity_to,calculation_method,calculation_parameters").eq("organization_id",membership.organization_id)
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error;
+  const {data:parameterRows,error:parameterError}=await s.from("organization_dsr_rule_category_parameters").select("id,organization_id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,version,validated_by,validated_at").eq("organization_id",membership.organization_id).eq("status","validated");
+  const issue=emp.error||sch.error||occ.error||ev.error||ruleRows.error||parameterError;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
   setOccurrences((occ.data||[]) as Occurrence[]);
   setEvents((ev.data||[]) as VariableEvent[]);
   setRules((ruleRows.data||[]) as DsrRule[]);
+  setCategoryParameters((parameterRows||[]) as CategoryParameter[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -122,12 +126,25 @@ export default function DsrMemoryPage(){
  const previewDeductions=remuneration.deductions;
  const previewEmployerCharges=remuneration.employerCharges;
  const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:remuneration.categories[category as keyof typeof remuneration.categories].amount}));
+ const monthStart=month+"-01";
+ const monthEnd=monthEndDate(month);
+ const employeeRuleIds=[...new Set((previewEmployee?.schedules||[]).map(x=>x.dsr_rule_id).filter((x):x is string=>Boolean(x)))];
+ const configuredParameters=categoryParameters.filter(p=>employeeRuleIds.includes(p.dsr_rule_id)&&p.status==="validated"&&p.effective_from<=monthStart&&(!p.effective_to||p.effective_to>=monthEnd));
+ const validatedParameterByCategory=Object.fromEntries(["overtime","commission","additional","bonus","other"].map(category=>{
+  const matches=configuredParameters.filter(p=>p.category===category);
+  return [category,matches.length===1?matches[0]:null];
+ }));
+ const effectiveCategoryInputs=Object.fromEntries(dsrCategoryTotals.map(group=>{
+  const configured=validatedParameterByCategory[group.category] as CategoryParameter|null;
+  const manual=categoryInputs[group.category];
+  return [group.category,configured?{denominator:String(configured.denominator),restUnits:String(configured.rest_units),unit:configured.unit}:manual];
+ }));
  const categoryPreviews=useMemo(()=>calculateDsrCategoryPreviews({
   categories:Object.fromEntries(dsrCategoryTotals.map(group=>[group.category,{amount:group.amount,count:group.events.length}])),
-  parameters:categoryInputs
- }),[dsrCategoryTotals,categoryInputs]);
+  parameters:effectiveCategoryInputs
+ }),[dsrCategoryTotals,effectiveCategoryInputs]);
  const populatedCategories=dsrCategoryTotals.filter(group=>group.amount>0);
- const categoryPreviewComplete=previewEmployee?.ready&&populatedCategories.length>0&&populatedCategories.every(group=>categoryPreviews[group.category as keyof typeof categoryPreviews]?.status==="calculated");
+ const categoryPreviewComplete=Boolean(previewEmployee?.ready&&populatedCategories.length>0&&populatedCategories.every(group=>Boolean(validatedParameterByCategory[group.category])&&categoryPreviews[group.category as keyof typeof categoryPreviews]?.status==="calculated"));
  const categoryPreviewTotal=categoryPreviewComplete?populatedCategories.reduce((sum,group)=>sum+Number(categoryPreviews[group.category as keyof typeof categoryPreviews].result?.amount||0),0):null;
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved"||x.status==="processed").length,pendingEvents:events.filter(x=>x.status==="pending").length,readyEmployees:summaries.filter(x=>x.ready).length,blockedEmployees:summaries.filter(x=>!x.ready).length}),[occurrences,schedules,events,summaries]);
 
@@ -147,12 +164,12 @@ export default function DsrMemoryPage(){
     <div><span>Prontos para análise técnica</span><b>{totals.readyEmployees}</b></div>
    </div>
    <section className="employee-list-card payroll-list dsr-preview-panel">
-    <div className="employee-list-head"><div><h2>Simulação controlada do DSR</h2><p>Prévia matemática sobre eventos variáveis aprovados/processados, com parâmetros informados manualmente.</p></div><span className="dsr-private-tag">PREVIEW · NÃO INTEGRA A FOLHA</span></div>
+    <div className="employee-list-head"><div><h2>Simulação controlada do DSR</h2><p>Prévia matemática com parâmetros normativos versionados e validados; cenários manuais permanecem identificados como não validados.</p></div><span className="dsr-private-tag">PREVIEW · NÃO INTEGRA A FOLHA</span></div>
     <div className="dsr-preview-body">
-     <div className="dsr-preview-warning"><ShieldAlert size={16}/><span>O sistema não presume divisor legal, quantidade de repousos, feriados ou natureza de rubricas. Confirme os parâmetros na regra normativa validada antes de utilizar qualquer resultado.</span></div>
+     <div className="dsr-preview-warning"><ShieldAlert size={16}/><span>O sistema não presume divisor, repousos ou unidade. Parâmetros persistidos só são utilizados quando a regra, a categoria e toda a vigência da competência estão validadas. Sem isso, a entrada manual é apenas cenário não validado.</span></div>
      <div className="dsr-category-calculation-intro">
       <b>Apuração individual por natureza da verba</b>
-      <span>Cada categoria exige seus próprios parâmetros, informados conforme a regra normativa validada. O sistema não copia denominadores, repousos ou unidades de uma categoria para outra.</span>
+      <span>Cada categoria utiliza sua própria versão validada e vinculada à regra normativa. A configuração precisa cobrir integralmente a competência; versões sem validação não alimentam a memória.</span>
      </div>
      <div className="dsr-preview-fields dsr-category-selector">
       <label>Colaborador<select value={previewEmployee?.employee.id||""} onChange={e=>setPreviewEmployeeId(e.target.value)}><option value="">Selecione</option>{employees.map(e=><option key={e.id} value={e.id}>{e.full_name} · {e.employee_code}</option>)}</select></label>
@@ -161,22 +178,23 @@ export default function DsrMemoryPage(){
      <div className="dsr-category-calculation-grid">
       {dsrCategoryTotals.map(group=>{
        const key=group.category;
-       const input=categoryInputs[key]||{denominator:"",restUnits:"",unit:"days" as const};
+       const configured=validatedParameterByCategory[key] as CategoryParameter|null;
+       const input=effectiveCategoryInputs[key]||{denominator:"",restUnits:"",unit:"days" as const};
        const result=categoryPreviews[key as keyof typeof categoryPreviews];
        const categoryName=({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios / gratificações",other:"Outros proventos"} as Record<string,string>)[key];
        return <article className="dsr-category-calculation-card" key={key}>
         <div className="dsr-category-calculation-head"><div><b>{categoryName}</b><small>{group.events.length} evento(s) aprovado(s)/processado(s)</small></div><strong>{money(group.amount)}</strong></div>
         {group.amount>0?<div className="dsr-category-calculation-fields">
-         <label>Unidade<select value={input.unit} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,unit:e.target.value as "days"|"hours"}}))}><option value="days">Dias</option><option value="hours">Horas</option></select></label>
-         <label>Denominador<input type="number" min="0.01" step="0.01" value={input.denominator} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,denominator:e.target.value}}))} placeholder="Conforme a regra"/></label>
-         <label>Repousos / unidades<input type="number" min="0" step="0.01" value={input.restUnits} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,restUnits:e.target.value}}))} placeholder="Conforme a regra"/></label>
+         <label>Unidade<select disabled={Boolean(configured)} value={input.unit} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,unit:e.target.value as "days"|"hours"}}))}><option value="days">Dias</option><option value="hours">Horas</option></select></label>
+         <label>Denominador<input disabled={Boolean(configured)} type="number" min="0.01" step="0.01" value={input.denominator} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,denominator:e.target.value}}))} placeholder="Conforme a regra"/></label>
+         <label>Repousos / unidades<input disabled={Boolean(configured)} type="number" min="0" step="0.01" value={input.restUnits} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,restUnits:e.target.value}}))} placeholder="Conforme a regra"/></label>
         </div>:<p className="dsr-category-empty">Não há eventos aprovados nesta categoria nesta competência.</p>}
-        <div className="dsr-category-result"><span>Prévia desta categoria</span><b>{!previewEmployee?.ready?"Bloqueada":result.status==="calculated"?money(Number(result.result?.amount||0)):result.status==="not_applicable"?"Não aplicável":"—"}</b><small>{!previewEmployee?.ready?"Conferência operacional pendente":result.message}</small></div>
+        <div className="dsr-category-result"><span>Prévia desta categoria</span><b>{!previewEmployee?.ready?"Bloqueada":result.status==="calculated"?money(Number(result.result?.amount||0)):result.status==="not_applicable"?"Não aplicável":"—"}</b><small>{!previewEmployee?.ready?"Conferência operacional pendente":configured?"Parâmetro normativo validado · versão "+configured.version:result.status==="calculated"?"Cenário manual calculado — NÃO VALIDADO":result.message}</small></div>
         {result.status==="calculated"&&result.result?.audit&&<div className="dsr-category-audit"><code>{money(group.amount)} ÷ {Number(result.result.audit.denominator).toLocaleString("pt-BR")} × {Number(result.result.audit.restUnits).toLocaleString("pt-BR")} = {money(Number(result.result.amount||0))}</code><small>Unidade: {result.result.audit.unit==="days"?"dias":"horas"} · Arredondamento ao final</small></div>}
        </article>;
       })}
      </div>
-     <div className="dsr-category-total"><div><span>Total das categorias calculadas</span><b>{categoryPreviewTotal===null?"Aguardando parâmetros completos":money(categoryPreviewTotal)}</b></div><small>O total só é apresentado quando todas as categorias com base possuem parâmetros válidos e a conferência operacional está liberada. Resultado exclusivamente informativo; não gera lançamento na folha.</small></div>
+     <div className="dsr-category-total"><div><span>Total com parâmetros normativos validados</span><b>{categoryPreviewTotal===null?"Aguardando parâmetros validados":money(categoryPreviewTotal)}</b></div><small>O total só aparece quando todas as categorias com base possuem uma configuração validada, vinculada à regra normativa e vigente durante toda a competência. Cenários manuais não são somados como resultado oficial e nunca geram lançamento na folha.</small></div>
      <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(remuneration.deductionsTotal)}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(remuneration.employerChargesTotal)}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{remuneration.pending.length}</b><small>Não compõem a prévia</small></div></div>
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
     </div>
