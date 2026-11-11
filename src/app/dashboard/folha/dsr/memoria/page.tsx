@@ -3,7 +3,6 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
-import {calculateDsrPreview} from "@/lib/payroll/dsr-calculator.mjs";
 import {summarizeDsrRemuneration} from "@/lib/payroll/dsr-remuneration.mjs";
 import {calculateDsrCategoryPreviews} from "@/lib/payroll/dsr-category-preview.mjs";
 
@@ -123,7 +122,6 @@ export default function DsrMemoryPage(){
  const previewDeductions=remuneration.deductions;
  const previewEmployerCharges=remuneration.employerCharges;
  const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:remuneration.categories[category as keyof typeof remuneration.categories].amount}));
- const previewBase=remuneration.earningsTotal;
  const categoryPreviews=useMemo(()=>calculateDsrCategoryPreviews({
   categories:Object.fromEntries(dsrCategoryTotals.map(group=>[group.category,{amount:group.amount,count:group.events.length}])),
   parameters:categoryInputs
@@ -180,7 +178,6 @@ export default function DsrMemoryPage(){
      </div>
      <div className="dsr-category-total"><div><span>Total das categorias calculadas</span><b>{categoryPreviewTotal===null?"Aguardando parâmetros completos":money(categoryPreviewTotal)}</b></div><small>O total só é apresentado quando todas as categorias com base possuem parâmetros válidos e a conferência operacional está liberada. Resultado exclusivamente informativo; não gera lançamento na folha.</small></div>
      <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(remuneration.deductionsTotal)}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(remuneration.employerChargesTotal)}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{remuneration.pending.length}</b><small>Não compõem a prévia</small></div></div>
-     {previewResult?.ok&&previewResult.audit&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(Number(previewResult.amount??0))}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
     </div>
    </section>
