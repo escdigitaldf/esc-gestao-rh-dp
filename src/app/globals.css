@@ -126,3 +126,10 @@
 .dsr-preview-audit small,.dsr-preview-hint{font-size:8px;color:#7c9094;line-height:1.5}
 @media(max-width:850px){.dsr-preview-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.dsr-preview-body{padding:13px}.dsr-preview-fields,.dsr-preview-summary{grid-template-columns:1fr}.dsr-preview-panel .employee-list-head{align-items:flex-start;flex-direction:column}}
+
+.dsr-preview-classification{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:10px}
+.dsr-preview-classification>div{display:flex;flex-direction:column;gap:5px;padding:11px;background:#fff;border:1px solid #e8edf0;border-radius:8px}
+.dsr-preview-classification span{font-size:8px;color:#82919b}
+.dsr-preview-classification b{font:800 12px Manrope;color:#40596a}
+.dsr-preview-classification small{font-size:8px;color:#91a0a8}
+@media(max-width:560px){.dsr-preview-classification{grid-template-columns:1fr}}
