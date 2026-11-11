@@ -4,7 +4,7 @@ import {useRouter} from "next/navigation";
 import {ArrowLeft,BookOpen,Plus,ShieldAlert,FileText,RefreshCw,Upload,Download,FileCheck2} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 
-type Rule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;validity_from:string|null;validity_to:string|null;document_reference:string|null;rule_summary:string|null;calculation_method:string|null;status:string;validation_notes:string|null;created_at:string};
+type Rule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;validity_from:string|null;validity_to:string|null;document_reference:string|null;rule_summary:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null;status:string;validation_notes:string|null;created_at:string};
 type RuleDocument={id:string;organization_id:string;dsr_rule_id:string;file_name:string;storage_path:string;mime_type:string;file_size:number;document_version:number;uploaded_by:string;uploaded_at:string;notes:string|null};
 const BUCKET="organization-dsr-documents";
 const MAX_FILE_SIZE=15*1024*1024;
@@ -35,6 +35,7 @@ export default function DsrRulesPage(){
  const [document,setDocument]=useState("");
  const [summary,setSummary]=useState("");
  const [method,setMethod]=useState("");
+ const [divisor,setDivisor]=useState("30");
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
@@ -59,6 +60,8 @@ export default function DsrRulesPage(){
   e.preventDefault();setError("");setSuccess("");
   if(!name.trim()||!source){setError("Informe o nome da regra e sua origem.");return;}
   if(from&&to&&to<from){setError("A validade final não pode anteceder a inicial.");return;}
+  const divisorValue=Number(divisor);
+  if(!Number.isFinite(divisorValue)||divisorValue<=0||divisorValue>31){setError("O divisor deve ser maior que zero e não pode ultrapassar 31.");return;}
   setSaving(true);
   try{
    const s=createClient();const {data:{user}}=await s.auth.getUser();
@@ -66,11 +69,11 @@ export default function DsrRulesPage(){
     organization_id:org,rule_name:name.trim(),professional_category:category.trim()||null,union_name:union.trim()||null,
     source_type:source,source_identifier:identifier.trim()||null,validity_from:from||null,validity_to:to||null,
     document_reference:document.trim()||null,rule_summary:summary.trim()||null,calculation_method:method||null,
-    calculation_parameters:{},status:"pending_validation",created_by:user?.id
+    calculation_parameters:{divisor:divisorValue},status:"pending_validation",created_by:user?.id
    });
    if(e)throw e;
    setSuccess("Referência normativa cadastrada. A regra permanece pendente e não libera cálculo.");
-   setName("");setCategory("");setUnion("");setIdentifier("");setFrom("");setTo("");setDocument("");setSummary("");setMethod("");
+   setName("");setCategory("");setUnion("");setIdentifier("");setFrom("");setTo("");setDocument("");setSummary("");setMethod("");setDivisor("30");
    await load();
   }catch(e){setError(e instanceof Error?e.message:"Não foi possível cadastrar a regra.");}
   finally{setSaving(false);}
@@ -168,6 +171,7 @@ export default function DsrRulesPage(){
      <label>Referência do documento<input value={document} onChange={e=>setDocument(e.target.value)} placeholder="Identificação ou referência do instrumento"/></label>
      <label>Resumo da cláusula / fundamento<textarea rows={4} value={summary} onChange={e=>setSummary(e.target.value)} placeholder="Indique a cláusula pertinente, número e página. Não inclua dados pessoais."/></label>
      <label>Critério de apuração identificado (opcional)<select value={method} onChange={e=>setMethod(e.target.value)}><option value="">Ainda não identificado / requer análise</option><option value="fixed_weekly">Regra por semana / repouso semanal</option><option value="hours_based">Base horária</option><option value="proportional_days">Proporcionalidade por dias</option><option value="custom">Critério específico descrito no instrumento</option></select></label>
+     <label>Divisor de referência (padrão 30)<input type="number" min="1" max="31" step="0.01" value={divisor} onChange={e=>setDivisor(e.target.value)}/><small>Parâmetro registrado para a futura memória de cálculo. A aplicação dependerá do critério da regra validada.</small></label>
      <button className="employee-primary" disabled={saving}><Plus size={15}/>{saving?"Salvando...":"Cadastrar referência normativa"}</button>
     </form>
    </div>
