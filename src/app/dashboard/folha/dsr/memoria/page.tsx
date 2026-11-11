@@ -5,6 +5,7 @@ import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "
 import {createClient} from "@/lib/supabase/client";
 import {calculateDsrPreview} from "@/lib/payroll/dsr-calculator.mjs";
 import {summarizeDsrRemuneration} from "@/lib/payroll/dsr-remuneration.mjs";
+import {calculateDsrCategoryPreviews} from "@/lib/payroll/dsr-category-preview.mjs";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
@@ -31,9 +32,7 @@ export default function DsrMemoryPage(){
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
  const [previewEmployeeId,setPreviewEmployeeId]=useState("");
- const [previewDenominator,setPreviewDenominator]=useState("");
- const [previewRestUnits,setPreviewRestUnits]=useState("");
- const [previewUnit,setPreviewUnit]=useState<"days"|"hours">("days");
+ const [categoryInputs,setCategoryInputs]=useState<Record<string,{denominator:string;restUnits:string;unit:"days"|"hours"}>>({});
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
@@ -125,10 +124,13 @@ export default function DsrMemoryPage(){
  const previewEmployerCharges=remuneration.employerCharges;
  const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:remuneration.categories[category as keyof typeof remuneration.categories].amount}));
  const previewBase=remuneration.earningsTotal;
- const previewResult=useMemo(()=>{
-  if(!previewEmployee?.ready||previewDenominator.trim()===""||previewRestUnits.trim()==="")return null;
-  return calculateDsrPreview({baseAmount:previewBase,denominator:Number(previewDenominator),restUnits:Number(previewRestUnits),unit:previewUnit,decimalPlaces:2});
- },[previewEmployee?.ready,previewDenominator,previewRestUnits,previewBase,previewUnit]);
+ const categoryPreviews=useMemo(()=>calculateDsrCategoryPreviews({
+  categories:Object.fromEntries(dsrCategoryTotals.map(group=>[group.category,{amount:group.amount,count:group.events.length}])),
+  parameters:categoryInputs
+ }),[dsrCategoryTotals,categoryInputs]);
+ const populatedCategories=dsrCategoryTotals.filter(group=>group.amount>0);
+ const categoryPreviewComplete=previewEmployee?.ready&&populatedCategories.length>0&&populatedCategories.every(group=>categoryPreviews[group.category as keyof typeof categoryPreviews]?.status==="calculated");
+ const categoryPreviewTotal=categoryPreviewComplete?populatedCategories.reduce((sum,group)=>sum+Number(categoryPreviews[group.category as keyof typeof categoryPreviews].result?.amount||0),0):null;
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved"||x.status==="processed").length,pendingEvents:events.filter(x=>x.status==="pending").length,readyEmployees:summaries.filter(x=>x.ready).length,blockedEmployees:summaries.filter(x=>!x.ready).length}),[occurrences,schedules,events,summaries]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
@@ -150,18 +152,33 @@ export default function DsrMemoryPage(){
     <div className="employee-list-head"><div><h2>Simulação controlada do DSR</h2><p>Prévia matemática sobre eventos variáveis aprovados/processados, com parâmetros informados manualmente.</p></div><span className="dsr-private-tag">PREVIEW · NÃO INTEGRA A FOLHA</span></div>
     <div className="dsr-preview-body">
      <div className="dsr-preview-warning"><ShieldAlert size={16}/><span>O sistema não presume divisor legal, quantidade de repousos, feriados ou natureza de rubricas. Confirme os parâmetros na regra normativa validada antes de utilizar qualquer resultado.</span></div>
-     <div className="dsr-preview-fields">
+     <div className="dsr-category-calculation-intro">
+      <b>Apuração individual por natureza da verba</b>
+      <span>Cada categoria exige seus próprios parâmetros, informados conforme a regra normativa validada. O sistema não copia denominadores, repousos ou unidades de uma categoria para outra.</span>
+     </div>
+     <div className="dsr-preview-fields dsr-category-selector">
       <label>Colaborador<select value={previewEmployee?.employee.id||""} onChange={e=>setPreviewEmployeeId(e.target.value)}><option value="">Selecione</option>{employees.map(e=><option key={e.id} value={e.id}>{e.full_name} · {e.employee_code}</option>)}</select></label>
-      <label>Unidade de apuração<select value={previewUnit} onChange={e=>setPreviewUnit(e.target.value as "days"|"hours")}><option value="days">Dias</option><option value="hours">Horas</option></select></label>
-      <label>Denominador da regra<input type="number" min="0.01" step="0.01" value={previewDenominator} onChange={e=>setPreviewDenominator(e.target.value)} placeholder={previewUnit==="days"?"Ex.: dias elegíveis":"Ex.: horas elegíveis"}/></label>
-      <label>Repousos / unidades aplicáveis<input type="number" min="0" step="0.01" value={previewRestUnits} onChange={e=>setPreviewRestUnits(e.target.value)} placeholder="Informe conforme a regra"/></label>
+      <div className="dsr-category-readiness"><span>Condição operacional</span><b>{previewEmployee?.ready?"Dados operacionais completos":"Bloqueado para prévia"}</b><small>{previewEmployee?.ready?"Escala, regra e ocorrências passaram pelas verificações.":"Ajuste os bloqueios de escala, regra ou ocorrências antes de simular."}</small></div>
      </div>
-     <div className="dsr-preview-summary">
-      <div><span>Proventos com incidência DSR</span><b>{money(previewBase)}</b><small>{previewEarnings.length} evento(s) · base candidata à simulação</small></div>
-      <div><span>Condição operacional</span><b>{previewEmployee?.ready?"Dados operacionais completos":"Bloqueado para prévia"}</b><small>{previewEmployee?.ready?"Escala, regra e ocorrências passaram pelas verificações.":"Selecione colaborador com conferência operacional completa."}</small></div>
-      <div><span>Resultado simulado</span><b>{previewResult?.ok?money(Number(previewResult.amount??0)):"—"}</b><small>{previewResult?.ok?"Resultado matemático não contabilizado":previewResult&&!previewResult.ok?previewResult.message:"Informe denominador e repousos para simular."}</small></div>
+     <div className="dsr-category-calculation-grid">
+      {dsrCategoryTotals.map(group=>{
+       const key=group.category;
+       const input=categoryInputs[key]||{denominator:"",restUnits:"",unit:"days" as const};
+       const result=categoryPreviews[key as keyof typeof categoryPreviews];
+       const categoryName=({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios / gratificações",other:"Outros proventos"} as Record<string,string>)[key];
+       return <article className="dsr-category-calculation-card" key={key}>
+        <div className="dsr-category-calculation-head"><div><b>{categoryName}</b><small>{group.events.length} evento(s) aprovado(s)/processado(s)</small></div><strong>{money(group.amount)}</strong></div>
+        {group.amount>0?<div className="dsr-category-calculation-fields">
+         <label>Unidade<select value={input.unit} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,unit:e.target.value as "days"|"hours"}}))}><option value="days">Dias</option><option value="hours">Horas</option></select></label>
+         <label>Denominador<input type="number" min="0.01" step="0.01" value={input.denominator} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,denominator:e.target.value}}))} placeholder="Conforme a regra"/></label>
+         <label>Repousos / unidades<input type="number" min="0" step="0.01" value={input.restUnits} onChange={e=>setCategoryInputs(current=>({...current,[key]:{...input,restUnits:e.target.value}}))} placeholder="Conforme a regra"/></label>
+        </div>:<p className="dsr-category-empty">Não há eventos aprovados nesta categoria nesta competência.</p>}
+        <div className="dsr-category-result"><span>Prévia desta categoria</span><b>{!previewEmployee?.ready?"Bloqueada":result.status==="calculated"?money(Number(result.result?.amount||0)):result.status==="not_applicable"?"Não aplicável":"—"}</b><small>{!previewEmployee?.ready?"Conferência operacional pendente":result.message}</small></div>
+        {result.status==="calculated"&&result.result?.audit&&<div className="dsr-category-audit"><code>{money(group.amount)} ÷ {Number(result.result.audit.denominator).toLocaleString("pt-BR")} × {Number(result.result.audit.restUnits).toLocaleString("pt-BR")} = {money(Number(result.result.amount||0))}</code><small>Unidade: {result.result.audit.unit==="days"?"dias":"horas"} · Arredondamento ao final</small></div>}
+       </article>;
+      })}
      </div>
-     <div className="dsr-preview-category-grid">{dsrCategoryTotals.map(group=><div key={group.category}><span>{({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios / gratificações",other:"Outros proventos"} as Record<string,string>)[group.category]}</span><b>{money(group.amount)}</b><small>{group.events.length} evento(s) · incluídos na base candidata</small></div>)}</div>
+     <div className="dsr-category-total"><div><span>Total das categorias calculadas</span><b>{categoryPreviewTotal===null?"Aguardando parâmetros completos":money(categoryPreviewTotal)}</b></div><small>O total só é apresentado quando todas as categorias com base possuem parâmetros válidos e a conferência operacional está liberada. Resultado exclusivamente informativo; não gera lançamento na folha.</small></div>
      <div className="dsr-preview-classification"><div><span>Descontos (fora da base)</span><b>{money(remuneration.deductionsTotal)}</b><small>{previewDeductions.length} evento(s) aprovado(s)</small></div><div><span>Encargos patronais (fora da base)</span><b>{money(remuneration.employerChargesTotal)}</b><small>{previewEmployerCharges.length} evento(s) aprovado(s)</small></div><div><span>Eventos pendentes de aprovação</span><b>{remuneration.pending.length}</b><small>Não compõem a prévia</small></div></div>
      {previewResult?.ok&&previewResult.audit&&<div className="dsr-preview-audit"><b>Memória da simulação</b><code>{money(Number(previewResult.audit.baseAmount??0))} ÷ {previewResult.audit.denominator.toLocaleString("pt-BR")} × {previewResult.audit.restUnits.toLocaleString("pt-BR")} = {money(Number(previewResult.amount??0))}</code><small>Arredondamento comercial ao final · Unidade: {previewResult.audit.unit==="days"?"dias":"horas"} · Precisão: 2 casas decimais</small></div>}
      {!previewEmployee&&<p className="dsr-preview-hint">Selecione um colaborador para visualizar a base variável disponível.</p>}
