@@ -11,6 +11,7 @@ type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence
 type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number;status:string;event_date:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number;missingDays:number;ruleOk:boolean;overlapDays:number;pendingEvents:number;ready:boolean;blockers:string[]};
 
+const monthEndDate=(v:string)=>new Date(Date.UTC(Number(v.slice(0,4)),Number(v.slice(5,7)),0)).toISOString().slice(0,10);
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const hours=(v:number)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" h";
@@ -36,7 +37,7 @@ export default function DsrMemoryPage(){
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
-  const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  const end=monthEndDate(month);
   const [emp,sch,occ,ev,ruleRows]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,dsr_rule_id,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
@@ -61,7 +62,7 @@ export default function DsrMemoryPage(){
   const employeeOccurrences=occurrences.filter(x=>x.employee_id===employee.id);
   const employeeEvents=events.filter(x=>x.employee_id===employee.id);
   const monthStart=month+"-01";
-  const monthEnd=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  const monthEnd=monthEndDate(month);
   const expectedByDate=new Map<string,string[]>();
   for(const schedule of employeeSchedules){
    const from=schedule.effective_from>monthStart?schedule.effective_from:monthStart;
