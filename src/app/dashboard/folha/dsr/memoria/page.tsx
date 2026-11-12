@@ -5,6 +5,7 @@ import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "
 import {createClient} from "@/lib/supabase/client";
 import {summarizeDsrRemuneration} from "@/lib/payroll/dsr-remuneration.mjs";
 import {calculateDsrCategoryPreviews} from "@/lib/payroll/dsr-category-preview.mjs";
+import {resolveDsrCategoryParameters} from "@/lib/payroll/dsr-category-parameters.mjs";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;dsr_rule_id:string|null;weekly_hours:number|null;cycle_days:number|null};
@@ -128,12 +129,14 @@ export default function DsrMemoryPage(){
  const dsrCategoryTotals=["overtime","commission","additional","bonus","other"].map(category=>({category,events:previewEarnings.filter(x=>x.dsr_category===category),amount:remuneration.categories[category as keyof typeof remuneration.categories].amount}));
  const monthStart=month+"-01";
  const monthEnd=monthEndDate(month);
- const employeeRuleIds=[...new Set((previewEmployee?.schedules||[]).map(x=>x.dsr_rule_id).filter((x):x is string=>Boolean(x)))];
- const configuredParameters=categoryParameters.filter(p=>employeeRuleIds.includes(p.dsr_rule_id)&&p.status==="validated"&&p.effective_from<=monthStart&&(!p.effective_to||p.effective_to>=monthEnd));
- const validatedParameterByCategory=Object.fromEntries(["overtime","commission","additional","bonus","other"].map(category=>{
-  const matches=configuredParameters.filter(p=>p.category===category);
-  return [category,matches.length===1?matches[0]:null];
- }));
+ const parameterResolution=resolveDsrCategoryParameters({
+  schedules:previewEmployee?.schedules||[],
+  parameters:categoryParameters,
+  competenceStart:monthStart,
+  competenceEnd:monthEnd,
+ });
+ const validatedParameterByCategory=parameterResolution.byCategory;
+ const hasSingleNormativeRule=parameterResolution.status==="ready"||parameterResolution.status==="ambiguous_parameters";
  const effectiveCategoryInputs=Object.fromEntries(dsrCategoryTotals.map(group=>{
   const configured=validatedParameterByCategory[group.category] as CategoryParameter|null;
   const manual=categoryInputs[group.category];
@@ -144,7 +147,7 @@ export default function DsrMemoryPage(){
   parameters:effectiveCategoryInputs
  }),[dsrCategoryTotals,effectiveCategoryInputs]);
  const populatedCategories=dsrCategoryTotals.filter(group=>group.amount>0);
- const categoryPreviewComplete=Boolean(previewEmployee?.ready&&populatedCategories.length>0&&populatedCategories.every(group=>Boolean(validatedParameterByCategory[group.category])&&categoryPreviews[group.category as keyof typeof categoryPreviews]?.status==="calculated"));
+ const categoryPreviewComplete=Boolean(previewEmployee?.ready&&hasSingleNormativeRule&&populatedCategories.length>0&&populatedCategories.every(group=>Boolean(validatedParameterByCategory[group.category])&&categoryPreviews[group.category as keyof typeof categoryPreviews]?.status==="calculated"));
  const categoryPreviewTotal=categoryPreviewComplete?populatedCategories.reduce((sum,group)=>sum+Number(categoryPreviews[group.category as keyof typeof categoryPreviews].result?.amount||0),0):null;
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved"||x.status==="processed").length,pendingEvents:events.filter(x=>x.status==="pending").length,readyEmployees:summaries.filter(x=>x.ready).length,blockedEmployees:summaries.filter(x=>!x.ready).length}),[occurrences,schedules,events,summaries]);
 
@@ -170,6 +173,8 @@ export default function DsrMemoryPage(){
      <div className="dsr-category-calculation-intro">
       <b>Apuração individual por natureza da verba</b>
       <span>Cada categoria utiliza sua própria versão validada e vinculada à regra normativa. A configuração precisa cobrir integralmente a competência; versões sem validação não alimentam a memória.</span>
+      {parameterResolution.status==="ambiguous_rules"&&<span className="dsr-resolution-warning">Consolidação normativa bloqueada: {parameterResolution.issues.join(" ")} A base mensal precisa ser segregada por período e regra antes de apresentar um total oficial.</span>}
+      {parameterResolution.status==="ambiguous_parameters"&&<span className="dsr-resolution-warning">Há mais de uma configuração normativa simultânea para uma categoria. Revise as versões e suas vigências antes de prosseguir.</span>}
      </div>
      <div className="dsr-preview-fields dsr-category-selector">
       <label>Colaborador<select value={previewEmployee?.employee.id||""} onChange={e=>setPreviewEmployeeId(e.target.value)}><option value="">Selecione</option>{employees.map(e=><option key={e.id} value={e.id}>{e.full_name} · {e.employee_code}</option>)}</select></label>
