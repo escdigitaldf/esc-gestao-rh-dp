@@ -3,6 +3,7 @@ import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,BookOpen,Plus,ShieldAlert,FileText,RefreshCw,Upload,Download,FileCheck2} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {resolveActiveOrganization} from "@/lib/organization-context";
 
 type Rule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;validity_from:string|null;validity_to:string|null;document_reference:string|null;rule_summary:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null;status:string;validation_notes:string|null;created_at:string};
 type RuleDocument={id:string;organization_id:string;dsr_rule_id:string;file_name:string;storage_path:string;mime_type:string;file_size:number;document_version:number;uploaded_by:string;uploaded_at:string;notes:string|null};
@@ -46,7 +47,7 @@ export default function DsrRulesPage(){
   const s=createClient();
   const {data:{user},error:authError}=await s.auth.getUser();
   if(authError||!user){router.replace("/");return;}
-  const {data:m,error:mError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").maybeSingle();
+  const {membership:m,error:mError}=await resolveActiveOrganization(s,user.id);
   if(mError||!m){setError(mError?.message||"Organização não encontrada.");setLoading(false);return;}
   setOrg(m.organization_id);
   const {data,error:queryError}=await s.from("organization_dsr_rules").select("*").eq("organization_id",m.organization_id).order("created_at",{ascending:false});
