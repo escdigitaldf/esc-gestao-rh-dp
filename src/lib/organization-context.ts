@@ -1,3 +1,5 @@
+import { selectActiveOrganization } from "./organization-selection.mjs";
+
 export type OrganizationOption = {
   organization_id: string;
   role: string;
@@ -66,10 +68,9 @@ export async function resolveActiveOrganization(
   const storedId = typeof window !== "undefined"
     ? window.localStorage.getItem(ACTIVE_ORGANIZATION_KEY)
     : null;
-  let selected = options.find((item) => item.organization_id === storedId) || null;
+  const { selected } = selectActiveOrganization(options, storedId);
 
-  if (!selected && options.length === 1) {
-    selected = options[0];
+  if (selected && options.length === 1 && storedId !== selected.organization_id) {
     rememberActiveOrganization(selected.organization_id);
   }
 
