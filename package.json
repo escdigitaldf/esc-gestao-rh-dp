@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:dsr": "node --test tests/dsr-*.test.mjs"
+    "test:dsr": "node --test tests/dsr-*.test.mjs",
+    "test:unit": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
