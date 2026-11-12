@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,Plus,Search,Wallet,Users,CalendarDays,FileText,Lock,RefreshCw,CheckCircle2,AlertCircle,History,Settings} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {resolveActiveOrganization} from "@/lib/organization-context";
 type Employee={id:string;employee_code:string;full_name:string;salary_amount:number|null;employment_status:string;employment_type:string;admission_date:string|null;termination_date:string|null};
 type Run={id:string;reference_month:string;payment_date:string|null;status:string;employee_count:number;total_earnings:number;total_deductions:number;total_net:number;notes:string|null;tax_parameters_snapshot?:{payroll_proration_method?:string}|null};
 type Entry={id:string;employee_id:string;employee_code:string;employee_name:string;salary_base:number;gross_amount:number;deductions_amount:number;net_amount:number;status:string;notes:string|null};
