@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {resolveActiveOrganization} from "@/lib/organization-context";
 import {summarizeDsrRemuneration} from "@/lib/payroll/dsr-remuneration.mjs";
 import {calculateDsrCategoryPreviews} from "@/lib/payroll/dsr-category-preview.mjs";
 import {resolveDsrCategoryParameters} from "@/lib/payroll/dsr-category-parameters.mjs";
@@ -41,7 +42,7 @@ export default function DsrMemoryPage(){
   const s=createClient();
   const {data:{user},error:authError}=await s.auth.getUser();
   if(authError||!user){router.replace("/");return;}
-  const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").maybeSingle();
+  const {membership,error:membershipError}=await resolveActiveOrganization(s,user.id);
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
   const end=monthEndDate(month);
