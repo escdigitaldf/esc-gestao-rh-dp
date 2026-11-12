@@ -3,11 +3,12 @@ import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,Building2,Plus,Search,Trash2,Pencil, X} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {resolveActiveOrganization} from "@/lib/organization-context";
 type Dept={id:string;name:string;code:string|null;description:string|null;is_active:boolean};
 const empty={name:"",code:"",description:""};
 export default function DepartmentsPage(){
  const router=useRouter();const [orgId,setOrgId]=useState("");const [company,setCompany]=useState("");const [rows,setRows]=useState<Dept[]>([]);const [search,setSearch]=useState("");const [form,setForm]=useState(empty);const [editing,setEditing]=useState<string|null>(null);const [open,setOpen]=useState(false);const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [error,setError]=useState("");
- const load=useCallback(async()=>{const s=createClient();const {data:{user},error:auth}=await s.auth.getUser();if(auth||!user){router.replace("/");return;}const {data:m,error:me}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1);if(me){setError(me.message);setLoading(false);return;}if(!m?.length){router.replace("/onboarding");return;}const id=m[0].organization_id;setOrgId(id);const [{data:o},{data:d,error:de}]=await Promise.all([s.from("organizations").select("legal_name,trade_name").eq("id",id).single(),s.from("departments").select("id,name,code,description,is_active").eq("organization_id",id).order("name")]);if(de)setError(de.message);setCompany(o?.trade_name||o?.legal_name||"Empresa");setRows(d||[]);setLoading(false);},[router]);
+ const load=useCallback(async()=>{const s=createClient();const {data:{user},error:auth}=await s.auth.getUser();if(auth||!user){router.replace("/");return;}const {membership:m,error:me}=await resolveActiveOrganization(s,user.id);if(me){setError(me.message);setLoading(false);return;}if(!m){router.replace("/dashboard");return;}const id=m.organization_id;setOrgId(id);const [{data:o},{data:d,error:de}]=await Promise.all([s.from("organizations").select("legal_name,trade_name").eq("id",id).single(),s.from("departments").select("id,name,code,description,is_active").eq("organization_id",id).order("name")]);if(de)setError(de.message);setCompany(o?.trade_name||o?.legal_name||"Empresa");setRows(d||[]);setLoading(false);},[router]);
  useEffect(()=>{void load()},[load]);
  const filtered=rows.filter(x=>(x.name+" "+(x.code||"")).toLowerCase().includes(search.toLowerCase()));
  function start(row?:Dept){setError("");setEditing(row?.id||null);setForm(row?{name:row.name,code:row.code||"",description:row.description||""}:empty);setOpen(true);}
