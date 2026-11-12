@@ -192,3 +192,6 @@
  .dsr-category-parameters-panel .dsr-category-calculation-fields button{width:100%;justify-content:center}
  .dsr-category-parameters-panel .dsr-doc-version{flex-wrap:wrap}
 }
+
+
+.dsr-resolution-warning{display:block;margin-top:8px;padding:10px 12px;border:1px solid #d6a84b;border-radius:8px;background:rgba(214,168,75,.09);color:inherit;font-size:12px;line-height:1.5}
