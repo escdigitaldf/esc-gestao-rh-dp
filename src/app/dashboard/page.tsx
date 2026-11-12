@@ -12,7 +12,7 @@ export default function Dashboard(){
  s.from("employees").select("id",{count:"exact",head:true}).eq("organization_id",orgId).eq("employment_status","active"),
  s.from("departments").select("id",{count:"exact",head:true}).eq("organization_id",orgId),
  s.from("positions").select("id",{count:"exact",head:true}).eq("organization_id",orgId)
- ]);const issue=empError||activeError||deptError||posError;if(issue)setError(issue.message);if(org){setCompany(org.trade_name||org.legal_name);setTrial(org.trial_ends_at||null);}setCounts({employees:employees||0,active:active||0,departments:departments||0,positions:positions||0});setLoading(false);
+ ]);const issue=empError||activeError||deptError||posError;if(issue)setError(issue.message);if(org){setCompany(org.trade_name||org.legal_name||"Empresa");setTrial(org.trial_ends_at||null);}setCounts({employees:employees||0,active:active||0,departments:departments||0,positions:positions||0});setLoading(false);
  },[router]);
  useEffect(()=>{void load()},[load]);
  async function logout(){const s=createClient();await s.auth.signOut();router.replace("/");router.refresh();}
