@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Plus,Search,Clock3,Plane,AlertTriangle,Pencil,Trash2,ShieldCheck,FileText,Printer,Archive,Sparkles} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
+import {resolveActiveOrganization} from "@/lib/organization-context";
 type Emp={id:string;full_name:string;employee_code:string;cpf:string|null;admission_date:string|null;employment_type:string|null;employment_status:string;termination_date:string|null};
 type Period={id:string;employee_id:string;acquisition_start:string;acquisition_end:string;concession_start:string;concession_end:string;entitled_days:number;status:string;notes:string|null};
 type Schedule={id:string;employee_id:string;vacation_period_id:string;start_date:string;end_date:string;days:number;sold_days:number;status:string;payment_date:string|null;notes:string|null};
