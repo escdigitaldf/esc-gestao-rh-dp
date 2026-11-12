@@ -2,7 +2,7 @@ export type DsrCategoryKey = "overtime" | "commission" | "additional" | "bonus" 
 export type DsrCategoryParameterRecord = {
   id: string;
   dsr_rule_id: string;
-  category: DsrCategoryKey;
+  category: string;
   unit: "days" | "hours";
   denominator: number;
   rest_units: number;
