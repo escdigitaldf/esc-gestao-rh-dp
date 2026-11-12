@@ -11,14 +11,72 @@ const allowed=["application/pdf","image/jpeg","image/png","image/webp","applicat
 function sizeLabel(n:number){return n<1024*1024?(n/1024).toFixed(0)+" KB":(n/1024/1024).toFixed(2)+" MB";}
 export default function EmployeeDocumentsPage(){
  const params=useParams<{id:string}>();const employeeId=params.id;const router=useRouter();const searchParams=useSearchParams();
- const [orgId,setOrgId]=useState("");const [employee,setEmployee]=useState<Employee|null>(null);const [docs,setDocs]=useState<Doc[]>([]);const [loading,setLoading]=useState(true);const [uploading,setUploading]=useState(false);const [error,setError]=useState("");const [success,setSuccess]=useState("");const [search,setSearch]=useState("");const [category,setCategory]=useState("registro");const [title,setTitle]=useState("");const [description,setDescription]=useState("");const [docNumber,setDocNumber]=useState("");const [issueDate,setIssueDate]=useState("");const [expiryDate,setExpiryDate]=useState("");const [confidential,setConfidential]=useState(false);
+ const [orgId,setOrgId]=useState("");const [employee,setEmployee]=useState<Employee|null>(null);const [docs,setDocs]=useState<Doc[]>([]);const [loading,setLoading]=useState(true);const [uploading,setUploading]=useState(false);const [error,setError]=useState("");const [success,setSuccess]=useState("");const [search,setSearch]=useState("");const [category,setCategory]=useState("registro");const [title,setTitle]=useState("");const [description,setDescription]=useState("");const [docNumber,setDocNumber]=useState("");const [issueDate,setIssueDate]=useState("");const [expiryDate,setExpiryDate]=useState("");const [confidential,setConfidential]=useState(false);const [storageRemovedIds,setStorageRemovedIds]=useState<string[]>([]);
  const load=useCallback(async()=>{const s=createClient();const {data:{user},error:auth}=await s.auth.getUser();if(auth||!user){router.replace("/");return;}const {membership:m,error:me}=await resolveActiveOrganization(s,user.id);if(me||!m){setError(me?.message||"Nenhuma empresa vinculada.");setLoading(false);return;}setOrgId(m.organization_id);const [{data:e,error:ee},{data:d,error:de}]=await Promise.all([s.from("employees").select("id,full_name,employee_code,cpf").eq("id",employeeId).eq("organization_id",m.organization_id).single(),s.from("employee_documents").select("*").eq("employee_id",employeeId).eq("organization_id",m.organization_id).order("created_at",{ascending:false})]);if(ee||de)setError(ee?.message||de?.message||"Falha ao carregar documentos.");setEmployee(e);setDocs(d||[]);setLoading(false);},[employeeId,router]);
  useEffect(()=>{void load()},[load]);
  useEffect(()=>{const requested=searchParams.get("categoria");if(requested&&categories.some(x=>x.value===requested))setCategory(requested);},[searchParams]);
  const visible=docs.filter(d=>(d.title+" "+d.original_filename+" "+d.category).toLowerCase().includes(search.toLowerCase()));
- async function upload(file?:File){if(!file)return;setError("");setSuccess("");if(!allowed.includes(file.type)){setError("Formato não permitido. Envie PDF, JPG, PNG, WEBP, DOC, DOCX, XLS, XLSX ou TXT.");return;}if(file.size>20*1024*1024){setError("O arquivo ultrapassa o limite de 20 MB.");return;}if(!title.trim()){setError("Informe um título para o documento.");return;}setUploading(true);const s=createClient();let path="";try{const {data:{user}}=await s.auth.getUser();if(!user)throw new Error("Sessão expirada. Entre novamente.");const ext=file.name.includes(".")?file.name.split(".").pop()!.toLowerCase():"bin";path=orgId+"/"+employeeId+"/"+crypto.randomUUID()+"."+ext;const {error:up}=await s.storage.from("employee-documents").upload(path,file,{upsert:false,contentType:file.type});if(up)throw up;const {error:db}=await s.from("employee_documents").insert({organization_id:orgId,employee_id:employeeId,category,title:title.trim(),description:description||null,original_filename:file.name,storage_path:path,mime_type:file.type,file_size:file.size,document_number:docNumber||null,issue_date:issueDate||null,expiry_date:expiryDate||null,is_confidential:confidential,uploaded_by:user.id});if(db){await s.storage.from("employee-documents").remove([path]);throw db;}setTitle("");setDescription("");setDocNumber("");setIssueDate("");setExpiryDate("");setConfidential(false);setSuccess("Documento arquivado no prontuário do colaborador.");await load();}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar o documento.");}finally{setUploading(false);}}
+ async function upload(file?:File){
+  if(!file)return;
+  setError("");setSuccess("");
+  if(!allowed.includes(file.type)){setError("Formato não permitido. Envie PDF, JPG, PNG, WEBP, DOC, DOCX, XLS, XLSX ou TXT.");return;}
+  if(file.size>20*1024*1024){setError("O arquivo ultrapassa o limite de 20 MB.");return;}
+  if(!title.trim()){setError("Informe um título para o documento.");return;}
+  setUploading(true);
+  const s=createClient();
+  let path="";
+  try{
+   const {data:{user}}=await s.auth.getUser();
+   if(!user)throw new Error("Sessão expirada. Entre novamente.");
+   const ext=file.name.includes(".")?file.name.split(".").pop()!.toLowerCase():"bin";
+   path=orgId+"/"+employeeId+"/"+crypto.randomUUID()+"."+ext;
+   const documentRecord={organization_id:orgId,employee_id:employeeId,category,title:title.trim(),description:description||null,original_filename:file.name,storage_path:path,mime_type:file.type,file_size:file.size,document_number:docNumber||null,issue_date:issueDate||null,expiry_date:expiryDate||null,is_confidential:confidential,uploaded_by:user.id};
+   // Create the authorized metadata row first: Storage RLS requires this row
+   // for upload-failure cleanup and for later object deletion.
+   const {error:db}=await s.from("employee_documents").insert(documentRecord);
+   if(db)throw db;
+   const {error:up}=await s.storage.from("employee-documents").upload(path,file,{upsert:false,contentType:file.type});
+   if(up){
+    const {error:storageCleanup}=await s.storage.from("employee-documents").remove([path]);
+    if(storageCleanup){
+     throw new Error("O envio falhou e a limpeza do arquivo não foi confirmada. O registro foi mantido para permitir a conferência e a exclusão segura. Detalhe: "+up.message);
+    }
+    const {error:recordCleanup}=await s.from("employee_documents").delete().eq("organization_id",orgId).eq("employee_id",employeeId).eq("storage_path",path);
+    if(recordCleanup){
+     throw new Error("O envio falhou e o arquivo foi removido, mas não foi possível limpar o registro de controle. Atualize o prontuário e confira o item antes de tentar novamente.");
+    }
+    throw up;
+   }
+   setTitle("");setDescription("");setDocNumber("");setIssueDate("");setExpiryDate("");setConfidential(false);
+   setSuccess("Documento arquivado no prontuário do colaborador.");
+   await load();
+  }catch(e){
+   setError(e instanceof Error?e.message:"Não foi possível arquivar o documento.");
+   await load();
+  }finally{setUploading(false);}
+ }
  async function download(doc:Doc){const s=createClient();const {data,error}=await s.storage.from("employee-documents").createSignedUrl(doc.storage_path,60);if(error){setError(error.message);return;}window.open(data.signedUrl,"_blank","noopener,noreferrer");}
- async function remove(doc:Doc){if(!confirm("Excluir definitivamente este documento do prontuário?"))return;const s=createClient();const {error:st}=await s.storage.from("employee-documents").remove([doc.storage_path]);if(st){setError(st.message);return;}const {error:db}=await s.from("employee_documents").delete().eq("id",doc.id).eq("organization_id",orgId).eq("employee_id",employeeId);if(db){setError(db.message);return;}setSuccess("Documento excluído.");await load();}
+ async function remove(doc:Doc){
+  const alreadyRemoved=storageRemovedIds.includes(doc.id);
+  if(!confirm(alreadyRemoved?"O arquivo já foi removido do armazenamento. Deseja finalizar a exclusão do registro?":"Excluir definitivamente este documento do prontuário?"))return;
+  setError("");setSuccess("");
+  const s=createClient();
+  if(!alreadyRemoved){
+   const {error:st}=await s.storage.from("employee-documents").remove([doc.storage_path]);
+   if(st){setError("Não foi possível remover o arquivo do armazenamento. O registro foi preservado. "+st.message);return;}
+   // Keep an in-memory retry marker so a database failure does not cause the
+   // next click to repeat the Storage deletion.
+   setStorageRemovedIds(current=>current.includes(doc.id)?current:[...current,doc.id]);
+  }
+  const {error:db}=await s.from("employee_documents").delete().eq("id",doc.id).eq("organization_id",orgId).eq("employee_id",employeeId);
+  if(db){
+   setError("O arquivo foi removido do armazenamento, mas o registro ainda permanece no prontuário. Clique novamente em finalizar exclusão para concluir sem repetir a remoção do arquivo. "+db.message);
+   return;
+  }
+  setStorageRemovedIds(current=>current.filter(id=>id!==doc.id));
+  setSuccess("Documento excluído.");
+  await load();
+ }
  if(loading)return <div className="loading-screen">Carregando prontuário digital...</div>;
  if(!employee)return <main className="module-shell"><div className="module-content"><div className="notice error">{error||"Colaborador não encontrado."}</div><button className="employee-secondary" onClick={()=>router.push("/dashboard/colaboradores")}>Voltar aos colaboradores</button></div></main>;
  return <main className="module-shell"><header className="module-top"><a href={"/dashboard/colaboradores"}><ArrowLeft size={16}/> Colaboradores</a><b><span className="brand-mark">ESC</span> Gestão de RH e DP</b><span>Prontuário digital</span></header><section className="module-content docs-content">
@@ -34,7 +92,7 @@ export default function EmployeeDocumentsPage(){
  <label className="docs-file-picker"><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt" disabled={uploading} onChange={e=>{void upload(e.target.files?.[0]);e.currentTarget.value="";}}/><span><Upload size={18}/><b>{uploading?"Enviando e arquivando...":"Selecionar arquivo e arquivar"}</b><small>PDF, imagens, Word, Excel ou TXT · Máximo 20 MB</small></span></label>
  <div className="docs-security"><ShieldCheck size={16}/><span>Armazenamento privado. Acesso restrito a usuários autorizados de RH e administradores da empresa.</span></div></section>
  <section className="docs-list-card"><div className="docs-list-head"><div><h2>Arquivo funcional</h2><p>Documentos vinculados ao cadastro do colaborador</p></div><div className="employee-search"><Search size={15}/><input placeholder="Pesquisar documento..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
- {visible.length===0?<div className="module-empty"><FileText size={26}/><p>{search?"Nenhum documento corresponde à pesquisa.":"Nenhum documento arquivado. Comece incluindo documentos de registro e admissão."}</p></div>:<div className="docs-list">{visible.map(doc=><article className="docs-item" key={doc.id}><div className="docs-file-icon"><FileText size={19}/></div><div className="docs-item-info"><b>{doc.title}</b><span>{categories.find(c=>c.value===doc.category)?.label||doc.category} · {sizeLabel(Number(doc.file_size))}</span><small>{doc.original_filename} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}</small>{doc.expiry_date&&<small className={new Date(doc.expiry_date+"T23:59:59")<new Date()?"docs-expired":"docs-valid"}>{new Date(doc.expiry_date+"T12:00:00").toLocaleDateString("pt-BR")} · validade</small>}</div><div className="docs-item-actions"><button onClick={()=>void download(doc)} title="Visualizar / baixar"><Download size={16}/></button><button onClick={()=>void remove(doc)} title="Excluir documento"><Trash2 size={16}/></button></div></article>)}</div>}</section></div>
+ {visible.length===0?<div className="module-empty"><FileText size={26}/><p>{search?"Nenhum documento corresponde à pesquisa.":"Nenhum documento arquivado. Comece incluindo documentos de registro e admissão."}</p></div>:<div className="docs-list">{visible.map(doc=><article className="docs-item" key={doc.id}><div className="docs-file-icon"><FileText size={19}/></div><div className="docs-item-info"><b>{doc.title}</b><span>{categories.find(c=>c.value===doc.category)?.label||doc.category} · {sizeLabel(Number(doc.file_size))}</span><small>{doc.original_filename} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}</small>{doc.expiry_date&&<small className={new Date(doc.expiry_date+"T23:59:59")<new Date()?"docs-expired":"docs-valid"}>{new Date(doc.expiry_date+"T12:00:00").toLocaleDateString("pt-BR")} · validade</small>}</div><div className="docs-item-actions"><button onClick={()=>void download(doc)} title="Visualizar / baixar"><Download size={16}/></button><button onClick={()=>void remove(doc)} title={storageRemovedIds.includes(doc.id)?"Finalizar exclusão":"Excluir documento"}><Trash2 size={16}/></button></div></article>)}</div>}</section></div>
  <div className="docs-bottom-note"><ShieldCheck size={16}/> Documentos são armazenados em bucket privado, com políticas de acesso por organização. Links de visualização expiram após 60 segundos.</div>
  </section></main>;
 }
