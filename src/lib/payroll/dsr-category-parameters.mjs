@@ -6,9 +6,21 @@ const CATEGORIES = ["overtime", "commission", "additional", "bonus", "other"];
  * official preview because monthly remuneration has not been apportioned
  * between the rule periods.
  */
+/**
+ * @param {{
+ *   schedules?: Array<{dsr_rule_id: string | null}>,
+ *   parameters?: Array<{
+ *     id: string, dsr_rule_id: string, category: string, unit: "days" | "hours",
+ *     denominator: number, rest_units: number, effective_from: string,
+ *     effective_to: string | null, status: string, version: number
+ *   }>,
+ *   competenceStart?: string,
+ *   competenceEnd?: string
+ * }} [args]
+ */
 export function resolveDsrCategoryParameters({
-  schedules = [],
-  parameters = [],
+  schedules = /** @type {Array<{dsr_rule_id: string | null}>} */ ([]),
+  parameters = /** @type {Array<{id:string,dsr_rule_id:string,category:string,unit:"days"|"hours",denominator:number,rest_units:number,effective_from:string,effective_to:string|null,status:string,version:number}>} */ ([]),
   competenceStart,
   competenceEnd,
 } = {}) {
