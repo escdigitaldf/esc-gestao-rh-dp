@@ -46,7 +46,7 @@ export default function DsrRulesPage(){
   const s=createClient();
   const {data:{user},error:authError}=await s.auth.getUser();
   if(authError||!user){router.replace("/");return;}
-  const {data:m,error:mError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:m,error:mError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").maybeSingle();
   if(mError||!m){setError(mError?.message||"Organização não encontrada.");setLoading(false);return;}
   setOrg(m.organization_id);
   const {data,error:queryError}=await s.from("organization_dsr_rules").select("*").eq("organization_id",m.organization_id).order("created_at",{ascending:false});
