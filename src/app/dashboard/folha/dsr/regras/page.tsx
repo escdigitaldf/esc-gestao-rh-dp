@@ -6,7 +6,7 @@ import {createClient} from "@/lib/supabase/client";
 
 type Rule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;validity_from:string|null;validity_to:string|null;document_reference:string|null;rule_summary:string|null;calculation_method:string|null;calculation_parameters:{divisor?:number}|null;status:string;validation_notes:string|null;created_at:string};
 type RuleDocument={id:string;organization_id:string;dsr_rule_id:string;file_name:string;storage_path:string;mime_type:string;file_size:number;document_version:number;uploaded_by:string;uploaded_at:string;notes:string|null};
-type CategoryParameter={id:string;organization_id:string;dsr_rule_id:string;category:string;unit:"days"|"hours";denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_document_id:string|null;source_reference:string|null;version:number;supersedes_id:string|null;created_by:string;validated_by:string|null;validated_at:string|null};
+type CategoryParameter={id:string;organization_id:string;dsr_rule_id:string;category:string;unit:"days"|"hours";denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_document_id:string|null;source_reference:string|null;version:number;supersedes_id:string|null;created_by:string;validated_by:string|null;validated_at:string|null;rejection_reason:string|null};
 type ParameterInput={category:string;unit:"days"|"hours";denominator:string;restUnits:string;from:string;to:string;justification:string;sourceReference:string;sourceDocumentId:string};
 const BUCKET="organization-dsr-documents";
 const MAX_FILE_SIZE=15*1024*1024;
@@ -172,6 +172,29 @@ export default function DsrRulesPage(){
   finally{setSaving(false);}
  }
 
+ async function rejectCategoryParameter(parameter:CategoryParameter){
+  if(parameter.status!=="pending_validation")return;
+  const reason=window.prompt("Informe o motivo técnico da rejeição (mínimo 10 caracteres):");
+  if(reason===null)return;
+  if(reason.trim().length<10||reason.trim().length>2000){
+   setError("O motivo da rejeição deve conter entre 10 e 2000 caracteres.");return;
+  }
+  if(!window.confirm("Confirma a rejeição desta versão? O motivo, responsável e data ficarão registrados no histórico e a versão não poderá ser alterada."))return;
+  setSaving(true);setError("");setSuccess("");
+  try{
+   const s=createClient();const {data:{user},error:authError}=await s.auth.getUser();
+   if(authError||!user)throw new Error("Sessão não encontrada. Entre novamente.");
+   const {data,error:updateError}=await s.from("organization_dsr_rule_category_parameters")
+    .update({status:"rejected",validated_by:user.id,validated_at:new Date().toISOString(),rejection_reason:reason.trim()})
+    .eq("id",parameter.id).eq("organization_id",org).eq("status","pending_validation").select("id").maybeSingle();
+   if(updateError)throw updateError;
+   if(!data)throw new Error("A rejeição não foi registrada. Atualize a tela e confira se outro usuário já realizou a decisão.");
+   setSuccess("Parâmetro rejeitado. O motivo foi registrado e a versão ficou bloqueada para edição.");
+   await load();
+  }catch(e){setError(e instanceof Error?e.message:"Não foi possível rejeitar o parâmetro.");}
+  finally{setSaving(false);}
+ }
+
  async function validateRule(rule:Rule){
   setError("");setSuccess("");
   if(rule.status!=="pending_validation")return;
@@ -260,8 +283,8 @@ export default function DsrRulesPage(){
        <button className="employee-primary" disabled={saving} onClick={()=>void saveCategoryParameter(rule)}><Plus size={14}/> Registrar nova versão pendente</button>
       </div>:<p className="dsr-no-docs">Valide primeiro a referência normativa principal para liberar os parâmetros desta regra.</p>}
       {!ruleParams.length?<p className="dsr-no-docs">Nenhum parâmetro cadastrado.</p>:<div className="dsr-doc-version-list">{ruleParams.map(p=><div className="dsr-doc-version" key={p.id}>
-       <FileText size={17}/><div><b>{categoryLabel(p.category)} · versão {p.version}</b><span>{p.unit==="days"?"Dias":"Horas"} · {Number(p.denominator).toLocaleString("pt-BR")} de denominador · {Number(p.rest_units).toLocaleString("pt-BR")} repouso(s) · {dateBR(p.effective_from)} até {dateBR(p.effective_to)} · {p.status==="validated"?"Validado":p.status==="rejected"?"Rejeitado":"Pendente"}</span><span>{p.source_reference||"Documento vinculado"} · {p.validated_at?"Validado em "+dateTimeBR(p.validated_at):"Aguardando validação"}</span><span>{p.justification}</span></div>
-       {p.status==="pending_validation"&&<button className="employee-secondary" disabled={saving||rule.status!=="validated"} onClick={()=>void validateCategoryParameter(p)}><FileCheck2 size={13}/> Validar</button>}
+       <FileText size={17}/><div><b>{categoryLabel(p.category)} · versão {p.version}</b><span>{p.unit==="days"?"Dias":"Horas"} · {Number(p.denominator).toLocaleString("pt-BR")} de denominador · {Number(p.rest_units).toLocaleString("pt-BR")} repouso(s) · {dateBR(p.effective_from)} até {dateBR(p.effective_to)} · {p.status==="validated"?"Validado":p.status==="rejected"?"Rejeitado":"Pendente"}</span><span>{p.source_reference||"Documento vinculado"} · {p.validated_at?(p.status==="rejected"?"Decidido em ":"Validado em ")+dateTimeBR(p.validated_at):"Aguardando validação"}</span><span>{p.justification}</span>{p.rejection_reason&&<span className="dsr-rejection-reason"><b>Motivo da rejeição:</b> {p.rejection_reason}</span>}</div>
+       {p.status==="pending_validation"&&<div className="dsr-parameter-actions"><button className="employee-secondary" disabled={saving||rule.status!=="validated"} onClick={()=>void validateCategoryParameter(p)}><FileCheck2 size={13}/> Validar</button><button className="employee-secondary dsr-reject-action" disabled={saving||rule.status!=="validated"} onClick={()=>void rejectCategoryParameter(p)}>Rejeitar</button></div>}
       </div>)}</div>}
      </article>;
     })}</div>}
