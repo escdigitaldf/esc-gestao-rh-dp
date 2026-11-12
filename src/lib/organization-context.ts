@@ -21,7 +21,7 @@ export async function resolveActiveOrganization(
 ): Promise<{
   membership: OrganizationOption | null;
   organizations: OrganizationOption[];
-  error: string | null;
+  error: { message: string } | null;
 }> {
   const { data: memberships, error: membershipError } = await client
     .from("organization_memberships")
@@ -30,7 +30,7 @@ export async function resolveActiveOrganization(
     .eq("status", "active");
 
   if (membershipError) {
-    return { membership: null, organizations: [], error: membershipError.message };
+    return { membership: null, organizations: [], error: { message: membershipError.message } };
   }
 
   if (!memberships?.length) {
@@ -44,7 +44,7 @@ export async function resolveActiveOrganization(
     .in("id", organizationIds);
 
   if (organizationError) {
-    return { membership: null, organizations: [], error: organizationError.message };
+    return { membership: null, organizations: [], error: { message: organizationError.message } };
   }
 
   const options: OrganizationOption[] = (memberships as Array<{ organization_id: string; role: string }>).flatMap((item) => {
@@ -60,7 +60,7 @@ export async function resolveActiveOrganization(
   });
 
   if (!options.length) {
-    return { membership: null, organizations: [], error: "Nenhuma organização ativa foi encontrada para sua conta." };
+    return { membership: null, organizations: [], error: { message: "Nenhuma organização ativa foi encontrada para sua conta." } };
   }
 
   const storedId = typeof window !== "undefined"
@@ -77,7 +77,7 @@ export async function resolveActiveOrganization(
     return {
       membership: null,
       organizations: options,
-      error: "Sua conta possui acesso a mais de uma organização. Selecione o ambiente de trabalho no painel.",
+      error: { message: "Sua conta possui acesso a mais de uma organização. Selecione o ambiente de trabalho no painel." },
     };
   }
 
