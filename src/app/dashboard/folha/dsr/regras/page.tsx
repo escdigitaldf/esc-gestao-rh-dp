@@ -35,6 +35,8 @@ export default function DsrRulesPage(){
  const [document,setDocument]=useState("");
  const [summary,setSummary]=useState("");
  const [method,setMethod]=useState("");
+ const [validationDrafts,setValidationDrafts]=useState<Record<string,string>>({});
+ const [validating,setValidating]=useState("");
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
@@ -110,6 +112,25 @@ export default function DsrRulesPage(){
   finally{setUploading("");}
  }
 
+ async function validateRule(rule:Rule){
+  setError("");setSuccess("");
+  const note=validationDrafts[rule.id]?.trim()||"";
+  if(rule.status!=="pending_validation"){setError("Somente regras pendentes podem ser validadas.");return;}
+  if(note.length<20){setError("Registre uma justificativa de validação com pelo menos 20 caracteres, identificando a conferência realizada.");return;}
+  if(!confirm("Confirmar que a fonte normativa, vigência, categoria, cláusula e critério foram conferidos por responsável habilitado? Esta ação libera a regra para a próxima etapa de validação da escala."))return;
+  setValidating(rule.id);
+  try{
+   const s=createClient();
+   const {data,error:e}=await s.from("organization_dsr_rules").update({status:"validated",validation_notes:note}).eq("id",rule.id).eq("organization_id",org).eq("status","pending_validation").select("id").maybeSingle();
+   if(e)throw e;
+   if(!data)throw new Error("A regra não foi atualizada. Atualize a página e confira se outro usuário alterou o status.");
+   setValidationDrafts(current=>({...current,[rule.id]:""}));
+   setSuccess("Regra normativa validada e registrada. A escala vinculada ainda precisa de validação independente.");
+   await load();
+  }catch(e){setError(e instanceof Error?e.message:"Não foi possível validar a regra.");}
+  finally{setValidating("");}
+ }
+
  async function openDocument(doc:RuleDocument){
   setError("");setOpening(doc.id);
   try{
@@ -142,7 +163,8 @@ export default function DsrRulesPage(){
    </div>
    <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Referências cadastradas</h2><p>Somente regras validadas poderão ser consideradas em etapa futura de cálculo.</p></div><button className="employee-secondary" onClick={()=>void load()}><RefreshCw size={14}/> Atualizar</button></div>
     {!rules.length?<div className="employee-empty"><FileText size={22}/><b>Nenhuma referência cadastrada</b><p>Cadastre a CCT, ACT ou fundamento legal aplicável à categoria.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra</th><th>Categoria / sindicato</th><th>Origem</th><th>Vigência</th><th>Critério registrado</th><th>Status</th></tr></thead><tbody>{rules.map(r=><tr key={r.id}><td><b>{r.rule_name}</b><br/><small>{r.source_identifier||"Sem identificação"}</small>{r.document_reference&&<><br/><small>{r.document_reference}</small></>}</td><td>{r.professional_category||"Não informada"}<br/><small>{r.union_name||"Entidade não informada"}</small></td><td>{sourceLabel(r.source_type)}</td><td>{dateBR(r.validity_from)} até {dateBR(r.validity_to)}</td><td>{r.calculation_method||"A definir após análise documental"}</td><td><span className="status-pill">{r.status==="validated"?"Validada":r.status==="suspended"?"Suspensa":"Pendente de validação"}</span></td></tr>)}</tbody></table></div>}
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra</th><th>Categoria / sindicato</th><th>Origem</th><th>Vigência</th><th>Critério registrado</th><th>Status</th><th>Conferência humana</th></tr></thead><tbody>{rules.map(r=><tr key={r.id}><td><b>{r.rule_name}</b><br/><small>{r.source_identifier||"Sem identificação"}</small>{r.document_reference&&<><br/><small>{r.document_reference}</small></>}</td><td>{r.professional_category||"Não informada"}<br/><small>{r.union_name||"Entidade não informada"}</small></td><td>{sourceLabel(r.source_type)}</td><td>{dateBR(r.validity_from)} até {dateBR(r.validity_to)}</td><td>{r.calculation_method||"A definir após análise documental"}</td><td><span className="status-pill">{r.status==="validated"?"Validada":r.status==="suspended"?"Suspensa":"Pendente de validação"}</span></td>
+       <td>{r.status==="pending_validation"?<div className="dsr-validation-action"><textarea rows={2} value={validationDrafts[r.id]||""} onChange={e=>setValidationDrafts(current=>({...current,[r.id]:e.target.value}))} placeholder="Registre a conferência da fonte, vigência, categoria e cláusula."/><button className="employee-primary" disabled={validating===r.id||!validationDrafts[r.id]?.trim()} onClick={()=>void validateRule(r)}>{validating===r.id?"Validando...":"Confirmar validação"}</button></div>:<small>{r.validation_notes||"Sem observação registrada"}</small>}</td></tr>)}</tbody></table></div>}
    </div>
    <section className="employee-list-card dsr-documents-panel">
     <div className="employee-list-head"><div><h2>Gestão documental das regras</h2><p>Anexe o instrumento integral e mantenha versões históricas sem sobrescrever arquivos anteriores.</p></div><span className="dsr-private-tag">ARMAZENAMENTO PRIVADO</span></div>
