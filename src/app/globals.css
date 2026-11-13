@@ -107,3 +107,11 @@
  .dsr-doc-version>div{flex-basis:calc(100% - 30px)}
  .dsr-doc-version button{margin-left:27px}
 }
+
+
+/* DSR normative human validation */
+.dsr-validation-action{display:grid;gap:7px;min-width:190px}
+.dsr-validation-action textarea{display:block;width:100%;min-height:58px;resize:vertical;padding:8px;border:1px solid #dfe7eb;border-radius:7px;background:#fff;color:#40576a;font:9px 'DM Sans',sans-serif;line-height:1.45}
+.dsr-validation-action button{justify-content:center;white-space:nowrap;font-size:8px;padding:8px 10px}
+.payroll-content .employee-table th:last-child,.payroll-content .employee-table td:last-child{min-width:210px}
+@media(max-width:760px){.dsr-validation-action{min-width:180px}}
