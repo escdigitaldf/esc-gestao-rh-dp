@@ -131,6 +131,7 @@ export default function DsrMemoryPage(){
     if(date>today)continue;
     const active=schedules.filter(x=>x.employee_id===employee.id&&x.effective_from<=date&&(!x.effective_to||x.effective_to>=date));
     const occurrence=occurrences.find(x=>x.employee_id===employee.id&&x.occurrence_date===date);
+    const holiday=holidays.find(h=>h.holiday_date===date&&["national","organization"].includes(h.holiday_scope));
     if(active.length>1){results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Escalas sobrepostas",detail:"Mais de uma escala cobre esta data."});continue;}
     if(active.length===0){if(occurrence)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Ocorrência sem escala vigente",detail:"O apontamento existe, mas não há escala vigente na data."});continue;}
     const schedule=active[0];
@@ -146,7 +147,8 @@ export default function DsrMemoryPage(){
      if(pattern==="work")scheduledDay=true;else if(pattern==="rest")scheduledDay=false;
     }
     if(!occurrence){
-     if(scheduledDay===true)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Dia previsto sem apontamento",detail:"Pendência de registro/conferência; não é classificada automaticamente como falta."});
+     if(holiday)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Feriado sem classificação",detail:"Feriado cadastrado: "+holiday.name+". "+(holiday.is_optional_workday?"Ponto facultativo/dia opcional; confirmar a jornada efetivamente praticada.":"Conferir a escala, o funcionamento e o apontamento aplicável.")+" A ausência de registro não gera falta ou desconto automático."});
+     else if(scheduledDay===true)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Dia previsto sem apontamento",detail:"Pendência de registro/conferência; não é classificada automaticamente como falta."});
      else if(scheduledDay===null)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Dia sem classificação",detail:"O padrão cadastrado não permite determinar trabalho ou repouso com segurança."});
      continue;
     }
@@ -162,13 +164,14 @@ export default function DsrMemoryPage(){
  const auditCounts=useMemo(()=>({missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
  const reviewChecks=useMemo(()=>{
   const start=month+"-01",end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const activeSchedules=schedules.filter(s=>s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
+  const activeEmployeeIds=new Set(employees.filter(employee=>employee.employment_status==="active").map(employee=>employee.id));
+  const activeSchedules=schedules.filter(s=>activeEmployeeIds.has(s.employee_id)&&s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
   const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated"&&rule.validity_from&&rule.validity_from<=start&&(!rule.validity_to||rule.validity_to>=end));});
   const eventAudits=events.map(eventAudit);
   const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
   const pendingEvents=events.filter(x=>x.status==="pending").length;
   const checks=[
-   {label:"Cobertura diária e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
+   {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"}
