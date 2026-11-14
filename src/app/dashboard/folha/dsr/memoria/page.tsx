@@ -48,10 +48,10 @@ export default function DsrMemoryPage(){
   const s=createClient();
   const {data:{user},error:authError}=await s.auth.getUser();
   if(authError||!user){router.replace("/");return;}
-  const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
-  setOrganizationId(membership.organization_id);setCurrentUserId(user.id);
+  setOrganizationId(membership.organization_id);setCurrentUserId(user.id);setCurrentRole(membership.role||"");
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const [emp,sch,occ,ev,rub,rule,param,hol,history]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
@@ -161,7 +161,8 @@ export default function DsrMemoryPage(){
   }
   return results.sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
  },[month,employees,schedules,occurrences,holidays]);
- const auditCounts=useMemo(()=>({missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
+ const auditCounts=useMemo(()=>({holidays:competenceAudit.filter(x=>x.issue==="Feriado sem classificação").length,missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
+ const canReview=["owner","admin","hr_manager","payroll"].includes(currentRole);
  const reviewChecks=useMemo(()=>{
   const start=month+"-01",end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const activeEmployeeIds=new Set(employees.filter(employee=>employee.employment_status==="active").map(employee=>employee.id));
@@ -192,6 +193,7 @@ export default function DsrMemoryPage(){
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
  }
  const registerReview=async()=>{
+  if(!canReview){setError("Seu perfil não possui permissão para registrar a conferência do DSR.");return;}
   if(reviewNote.trim().length<20){setError("Informe uma observação de conferência com pelo menos 20 caracteres.");return;}
   if(!organizationId||!currentUserId){setError("Não foi possível identificar a organização ou o responsável.");return;}
   setSavingReview(true);setError("");
@@ -243,6 +245,7 @@ export default function DsrMemoryPage(){
     </tbody></table></div>}
    </div>
    <div className="employee-stats payroll-stats">
+    <div><span>Feriados sem classificação</span><b>{auditCounts.holidays}</b></div>
     <div><span>Dias previstos sem apontamento</span><b>{auditCounts.missing}</b></div>
     <div><span>Rascunhos/rejeitadas</span><b>{auditCounts.unresolved}</b></div>
     <div><span>Conflitos/divergências</span><b>{auditCounts.conflicts}</b></div>
@@ -252,10 +255,11 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Checklist técnico para conferência</h2><p>Os critérios abaixo controlam a prontidão documental. Mesmo sem pendências, a aprovação final do DP e o cálculo financeiro continuam separados.</p></div><span>{reviewChecks.blockers===0?"Sem bloqueios identificados":reviewChecks.blockers+" bloqueio(s)"}</span></div>
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Critério</th><th>Resultado</th><th>Detalhe</th></tr></thead><tbody>{reviewChecks.checks.map(check=><tr key={check.label}><td>{check.label}</td><td><span className="status-pill">{check.ok?"Conferido":"Pendente"}</span></td><td>{check.detail}</td></tr>)}</tbody></table></div>
+    <p className="form-hint">Perfil atual: <b>{currentRole||"não identificado"}</b> · {canReview?"Pode registrar conferência.":"Apenas consulta; registro restrito a owner, admin, gerente de RH ou folha."}</p>
     <label className="review-note-label">Observação do responsável pela conferência<textarea value={reviewNote} onChange={e=>setReviewNote(e.target.value)} minLength={20} placeholder="Registre a análise realizada, documentos verificados e providências..." rows={3}/></label>
-    <button className="employee-primary" onClick={()=>void registerReview()} disabled={savingReview}>{savingReview?"Registrando...":"Registrar conferência da competência"}</button>
+    <button className="employee-primary" onClick={()=>void registerReview()} disabled={savingReview||!canReview}>{savingReview?"Registrando...":"Registrar conferência da competência"}</button>
     <p className="form-hint">O registro cria histórico de auditoria com responsável, data/hora, checklist e observação. Não fecha a competência, não aprova automaticamente regras e não libera o cálculo financeiro.</p>
-    {reviewHistory.length>0&&<><h3>Histórico de conferências</h3><div className="table-scroll"><table className="employee-table"><thead><tr><th>Data/hora</th><th>Responsável (ID)</th><th>Resultado</th><th>Observação</th></tr></thead><tbody>{reviewHistory.map((log,index)=><tr key={log.created_at+"-"+index}><td>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td>{log.actor_user_id||"—"}</td><td><span className="status-pill">{log.action==="dsr_competence_review_blocked"?"Registrado com bloqueios":"Pronto para aprovação manual"}</span></td><td>{String(log.metadata?.note||"—")}</td></tr>)}</tbody></table></div></>}
+    {reviewHistory.length>0&&<><h3>Histórico de conferências</h3><div className="table-scroll"><table className="employee-table"><thead><tr><th>Data/hora</th><th>Responsável (ID)</th><th>Resultado</th><th>Observação</th></tr></thead><tbody>{reviewHistory.map((log,index)=><tr key={log.created_at+"-"+index}><td>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td>{log.actor_user_id||"—"}</td><td><span className="status-pill">{log.action==="dsr_competence_review_blocked"?"Registrado com bloqueios":log.action==="dsr_competence_review_ready_for_manual_approval"?"Pronto para aprovação manual":log.action}</span></td><td>{String(log.metadata?.note||"—")}</td></tr>)}</tbody></table></div></>}
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Pendências da competência</h2><p>Conferência de todos os colaboradores ativos, considerando somente datas até hoje. Pendências não são convertidas automaticamente em faltas ou descontos.</p></div><span>{competenceAudit.length} pendência(s)</span></div>
