@@ -86,7 +86,7 @@ export default function DsrMemoryPage(){
   const eventDate=event.event_date||month+"-01";
   const linkedSchedules=schedules.filter(schedule=>schedule.employee_id===event.employee_id&&schedule.dsr_rule_id&&schedule.dsr_rule_status==="validated"&&schedule.effective_from<=eventDate&&(!schedule.effective_to||schedule.effective_to>=eventDate));
   const validatedRuleIds=dsrRules.filter(rule=>rule.status==="validated"&&rule.validity_from&&rule.validity_from<=eventDate&&(!rule.validity_to||rule.validity_to>=eventDate)).map(rule=>rule.id);
-  const applicableRuleIds=linkedSchedules.map(schedule=>schedule.dsr_rule_id).filter((id):id is string=>Boolean(id)&&validatedRuleIds.includes(id));
+  const applicableRuleIds=linkedSchedules.map(schedule=>schedule.dsr_rule_id).filter((id):id is string=>id!==null&&validatedRuleIds.includes(id));
   if(!applicableRuleIds.length)return "Sem escala e regra normativa validadas na data do evento";
   const hasParameter=categoryParameters.some(parameter=>applicableRuleIds.includes(parameter.dsr_rule_id)&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
