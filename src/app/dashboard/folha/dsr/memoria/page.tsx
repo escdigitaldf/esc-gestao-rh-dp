@@ -160,7 +160,7 @@ export default function DsrMemoryPage(){
    }
   }
   return results.sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
- },[month,employees,schedules,occurrences]);
+ },[month,employees,schedules,occurrences,holidays]);
  const auditCounts=useMemo(()=>({missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
  const reviewChecks=useMemo(()=>{
   const start=month+"-01",end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
