@@ -86,15 +86,16 @@ export default function DsrMemoryPage(){
      {summaries.map(row=>{
       const approved=row.events.filter(x=>x.status==="approved");
       const pending=row.events.filter(x=>x.status==="pending");
+      const processed=row.events.filter(x=>x.status==="processed");
       const scheduleOk=row.schedules.length>0&&row.schedules.every(x=>x.dsr_rule_status==="validated");
       const hasDraft=row.draft>0;
-      const condition=!scheduleOk?"Regra/escala pendente":hasDraft?"Apontamentos pendentes":approved.length?"Evento DSR requer apuração":"Aguardando validação DP";
+      const condition=!scheduleOk?"Regra/escala pendente":hasDraft?"Apontamentos pendentes":approved.length?"Evento DSR requer apuração":processed.length?"Evento já processado na folha":"Aguardando validação DP";
       return <tr key={row.employee.id}>
        <td><b>{row.employee.full_name}</b><br/><small>{row.employee.employee_code}</small></td>
        <td>{row.schedules.length?row.schedules.map(x=><div key={x.id}>{x.schedule_name}<br/><small>{typeName(x.schedule_type)} · {x.dsr_rule_status==="validated"?"Regra validada":"Regra pendente"}</small></div>):"Sem escala"}</td>
        <td>{row.validated} validadas · {row.draft} rascunhos · {row.rejected} rejeitadas</td>
        <td>{hours(row.scheduled)}</td><td>{hours(row.worked)}</td>
-       <td>{approved.length} aprovados{pending.length?" · "+pending.length+" pendentes":""}{approved.length>0&&<small><br/>Base informativa: {money(approved.reduce((a,x)=>a+eventAmount(x),0))}</small>}</td>
+       <td>{approved.length} aprovados{pending.length?" · "+pending.length+" pendentes":""}{processed.length?" · "+processed.length+" processados":""}{approved.length>0&&<small><br/>Base informativa: {money(approved.reduce((a,x)=>a+eventAmount(x),0))}</small>}</td>
        <td><span className="status-pill">{condition}</span></td>
       </tr>;
      })}
