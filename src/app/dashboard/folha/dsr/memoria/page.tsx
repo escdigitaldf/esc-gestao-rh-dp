@@ -177,7 +177,7 @@ export default function DsrMemoryPage(){
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"}
   ];
   return {checks,blockers:checks.filter(x=>!x.ok).length};
- },[month,schedules,dsrRules,events,competenceAudit]);
+ },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  function eventAudit(event:VariableEvent){
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
