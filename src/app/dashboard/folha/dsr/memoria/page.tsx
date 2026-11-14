@@ -13,6 +13,7 @@ type Rubric={id:string;code:string;description:string;item_type:string;affects_d
 type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_reference:string|null;version:number};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
+type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -33,6 +34,11 @@ export default function DsrMemoryPage(){
  const [categoryParameters,setCategoryParameters]=useState<CategoryParameter[]>([]);
  const [holidays,setHolidays]=useState<Holiday[]>([]);
  const [dailyEmployee,setDailyEmployee]=useState("");
+ const [organizationId,setOrganizationId]=useState("");
+ const [currentUserId,setCurrentUserId]=useState("");
+ const [reviewHistory,setReviewHistory]=useState<ReviewLog[]>([]);
+ const [reviewNote,setReviewNote]=useState("");
+ const [savingReview,setSavingReview]=useState(false);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
@@ -45,8 +51,9 @@ export default function DsrMemoryPage(){
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
+  setOrganizationId(membership.organization_id);setCurrentUserId(user.id);
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param,hol]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol,history]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
@@ -54,9 +61,10 @@ export default function DsrMemoryPage(){
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
    s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
    s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
-   s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end)
+   s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end),
+   s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20)
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -66,6 +74,7 @@ export default function DsrMemoryPage(){
   setDsrRules((rule.data||[]) as DsrRule[]);
   setCategoryParameters((param.data||[]) as CategoryParameter[]);
   setHolidays((hol.data||[]) as Holiday[]);
+  setReviewHistory((history.data||[]) as ReviewLog[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -151,6 +160,21 @@ export default function DsrMemoryPage(){
   return results.sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
  },[month,employees,schedules,occurrences]);
  const auditCounts=useMemo(()=>({missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
+ const reviewChecks=useMemo(()=>{
+  const start=month+"-01",end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  const activeSchedules=schedules.filter(s=>s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
+  const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated"&&rule.validity_from&&rule.validity_from<=start&&(!rule.validity_to||rule.validity_to>=end));});
+  const eventAudits=events.map(eventAudit);
+  const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
+  const pendingEvents=events.filter(x=>x.status==="pending").length;
+  const checks=[
+   {label:"Cobertura diária e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
+   {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
+   {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
+   {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"}
+  ];
+  return {checks,blockers:checks.filter(x=>!x.ok).length};
+ },[month,schedules,dsrRules,events,competenceAudit]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  const eventAudit=(event:VariableEvent)=>{
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
@@ -163,6 +187,17 @@ export default function DsrMemoryPage(){
   if(!applicableRuleIds.length)return "Sem escala e regra normativa validadas na data do evento";
   const hasParameter=categoryParameters.some(parameter=>applicableRuleIds.includes(parameter.dsr_rule_id)&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
+ };
+ const registerReview=async()=>{
+  if(reviewNote.trim().length<20){setError("Informe uma observação de conferência com pelo menos 20 caracteres.");return;}
+  if(!organizationId||!currentUserId){setError("Não foi possível identificar a organização ou o responsável.");return;}
+  setSavingReview(true);setError("");
+  const blocked=reviewChecks.blockers>0;
+  const s=createClient();
+  const {error:saveError}=await s.from("audit_logs").insert({organization_id:organizationId,actor_user_id:currentUserId,action:blocked?"dsr_competence_review_blocked":"dsr_competence_review_ready_for_manual_approval",resource_type:"dsr_competence_review",resource_id:month+"-01",metadata:{competence:month,status:blocked?"blocked":"ready_for_manual_approval",blockers:reviewChecks.blockers,checks:reviewChecks.checks,note:reviewNote.trim(),financial_calculation_released:false}});
+  if(saveError)setError("Não foi possível registrar a conferência: "+saveError.message);
+  else{setReviewNote("");await load();}
+  setSavingReview(false);
  };
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length,processedEvents:events.filter(x=>x.status==="processed").length,approvedAmount:events.filter(x=>x.status==="approved").reduce((a,x)=>a+eventAmount(x),0)}),[occurrences,schedules,events]);
 
@@ -210,6 +245,14 @@ export default function DsrMemoryPage(){
     <div><span>Conflitos/divergências</span><b>{auditCounts.conflicts}</b></div>
     <div><span>Escalas sem regra validada</span><b>{auditCounts.unvalidated}</b></div>
     <div><span>Dias sem classificação</span><b>{auditCounts.unclassified}</b></div>
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Checklist técnico para conferência</h2><p>Os critérios abaixo controlam a prontidão documental. Mesmo sem pendências, a aprovação final do DP e o cálculo financeiro continuam separados.</p></div><span>{reviewChecks.blockers===0?"Sem bloqueios identificados":reviewChecks.blockers+" bloqueio(s)"}</span></div>
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Critério</th><th>Resultado</th><th>Detalhe</th></tr></thead><tbody>{reviewChecks.checks.map(check=><tr key={check.label}><td>{check.label}</td><td><span className="status-pill">{check.ok?"Conferido":"Pendente"}</span></td><td>{check.detail}</td></tr>)}</tbody></table></div>
+    <label className="review-note-label">Observação do responsável pela conferência<textarea value={reviewNote} onChange={e=>setReviewNote(e.target.value)} minLength={20} placeholder="Registre a análise realizada, documentos verificados e providências..." rows={3}/></label>
+    <button className="employee-primary" onClick={()=>void registerReview()} disabled={savingReview}>{savingReview?"Registrando...":"Registrar conferência da competência"}</button>
+    <p className="form-hint">O registro cria histórico de auditoria com responsável, data/hora, checklist e observação. Não fecha a competência, não aprova automaticamente regras e não libera o cálculo financeiro.</p>
+    {reviewHistory.length>0&&<><h3>Histórico de conferências</h3><div className="table-scroll"><table className="employee-table"><thead><tr><th>Data/hora</th><th>Responsável (ID)</th><th>Resultado</th><th>Observação</th></tr></thead><tbody>{reviewHistory.map((log,index)=><tr key={log.created_at+"-"+index}><td>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td>{log.actor_user_id||"—"}</td><td><span className="status-pill">{log.action==="dsr_competence_review_blocked"?"Registrado com bloqueios":"Pronto para aprovação manual"}</span></td><td>{String(log.metadata?.note||"—")}</td></tr>)}</tbody></table></div></>}
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Pendências da competência</h2><p>Conferência de todos os colaboradores ativos, considerando somente datas até hoje. Pendências não são convertidas automaticamente em faltas ou descontos.</p></div><span>{competenceAudit.length} pendência(s)</span></div>
