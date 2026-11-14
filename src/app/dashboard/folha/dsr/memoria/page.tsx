@@ -36,6 +36,7 @@ export default function DsrMemoryPage(){
  const [dailyEmployee,setDailyEmployee]=useState("");
  const [organizationId,setOrganizationId]=useState("");
  const [currentUserId,setCurrentUserId]=useState("");
+ const [currentRole,setCurrentRole]=useState("");
  const [reviewHistory,setReviewHistory]=useState<ReviewLog[]>([]);
  const [reviewNote,setReviewNote]=useState("");
  const [savingReview,setSavingReview]=useState(false);
