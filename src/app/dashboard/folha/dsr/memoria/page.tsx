@@ -5,7 +5,8 @@ import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "
 import {createClient} from "@/lib/supabase/client";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
-type Schedule={id:string;employee_id:string;dsr_rule_id:string|null;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null};
+type Schedule={id:string;employee_id:string;dsr_rule_id:string|null;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null;work_days:number[];weekly_rest_days:number[];cycle_pattern:string[]};
+type Holiday={id:string;holiday_date:string;name:string;holiday_scope:string;state_code:string|null;city:string|null;is_optional_workday:boolean};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
 type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
@@ -30,6 +31,8 @@ export default function DsrMemoryPage(){
  const [rubrics,setRubrics]=useState<Rubric[]>([]);
  const [dsrRules,setDsrRules]=useState<DsrRule[]>([]);
  const [categoryParameters,setCategoryParameters]=useState<CategoryParameter[]>([]);
+ const [holidays,setHolidays]=useState<Holiday[]>([]);
+ const [dailyEmployee,setDailyEmployee]=useState("");
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
@@ -43,16 +46,17 @@ export default function DsrMemoryPage(){
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
    s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
-   s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category")
+   s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
+   s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end)
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -61,6 +65,7 @@ export default function DsrMemoryPage(){
   setRubrics((rub.data||[]) as Rubric[]);
   setDsrRules((rule.data||[]) as DsrRule[]);
   setCategoryParameters((param.data||[]) as CategoryParameter[]);
+  setHolidays((hol.data||[]) as Holiday[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -78,6 +83,33 @@ export default function DsrMemoryPage(){
    rejected:employeeOccurrences.filter(x=>x.record_status==="rejected").length};
  }),[employees,schedules,occurrences,events]);
  const rulesInUse=useMemo(()=>dsrRules.filter(rule=>schedules.some(schedule=>schedule.dsr_rule_id===rule.id)),[dsrRules,schedules]);
+ const selectedDailyEmployee=dailyEmployee||employees[0]?.id||"";
+ const dailyRows=useMemo(()=>{
+  const year=Number(month.slice(0,4)),monthIndex=Number(month.slice(5,7))-1;
+  const count=new Date(year,monthIndex+1,0).getDate();
+  const rows=[] as {date:string;dayLabel:string;scheduleLabel:string;dayType:string;occurrenceLabel:string;hoursLabel:string;statusLabel:string;alert:boolean}[];
+  for(let day=1;day<=count;day++){
+   const date=year+"-"+String(monthIndex+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+   const active=schedules.filter(x=>x.employee_id===selectedDailyEmployee&&x.effective_from<=date&&(!x.effective_to||x.effective_to>=date));
+   const occurrence=occurrences.find(x=>x.employee_id===selectedDailyEmployee&&x.occurrence_date===date);
+   const holiday=holidays.find(x=>x.holiday_date===date);
+   let dayType="Sem escala vigente",scheduledDay:boolean|null=null;
+   if(active.length>1)dayType="Conflito: mais de uma escala vigente";
+   else if(active.length===1){
+    const s=active[0];
+    if(s.schedule_type==="fixed_weekly"){const weekday=new Date(date+"T12:00:00").getDay();if((s.work_days||[]).includes(weekday)){scheduledDay=true;dayType="Dia previsto de trabalho";}else if((s.weekly_rest_days||[]).includes(weekday)){scheduledDay=false;dayType="Repouso semanal previsto";}else dayType="Dia sem classificação na escala";}
+    else if(s.cycle_days&&s.cycle_days>0&&(s.cycle_pattern||[]).length===s.cycle_days){const offset=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(s.effective_from+"T00:00:00Z"))/86400000);const pattern=s.cycle_pattern[((offset%s.cycle_days)+s.cycle_days)%s.cycle_days];if(pattern==="work"){scheduledDay=true;dayType="Dia previsto de trabalho (ciclo)";}else if(pattern==="rest"){scheduledDay=false;dayType="Repouso previsto (ciclo)";}else dayType="Padrão de ciclo inconsistente";}
+    else dayType="Escala sem padrão diário utilizável";
+   }
+   if(holiday){if(["national","organization"].includes(holiday.holiday_scope))dayType+=" · "+(holiday.is_optional_workday?"ponto facultativo":"feriado cadastrado");else dayType+=" · data local cadastrada (abrangência a conferir)";}
+   const occurrenceLabel=occurrence?({workday:"Trabalho",weekly_rest:"Repouso semanal",holiday:"Feriado",compensatory_rest:"Folga compensatória",absence_justified:"Falta justificada",absence_unjustified:"Falta injustificada",leave:"Afastamento",vacation:"Férias",other:"Outra ocorrência"} as Record<string,string>)[occurrence.occurrence_type]||occurrence.occurrence_type:"Sem apontamento";
+   const statusLabel=occurrence?(occurrence.record_status==="validated"?"Validada":occurrence.record_status==="rejected"?"Rejeitada":"Rascunho"):"Sem apontamento";
+   const mismatch=Boolean(occurrence&&scheduledDay!==null&&((scheduledDay&&["weekly_rest","compensatory_rest"].includes(occurrence.occurrence_type))||(!scheduledDay&&occurrence.occurrence_type==="workday")));
+   const alert=active.length!==1||Boolean(active[0]&&active[0].dsr_rule_status!=="validated")||mismatch||Boolean(occurrence&&occurrence.record_status!=="validated");
+   rows.push({date,dayLabel:new Date(date+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit"}),scheduleLabel:active.length===1?active[0].schedule_name:active.length>1?"Múltiplas escalas":"—",dayType,occurrenceLabel:occurrenceLabel+(mismatch?" · divergência com escala":""),hoursLabel:occurrence?Number(occurrence.worked_hours||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" h":"—",statusLabel,alert});
+  }
+  return rows;
+ },[month,selectedDailyEmployee,schedules,occurrences,holidays]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  const eventAudit=(event:VariableEvent)=>{
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
@@ -130,6 +162,10 @@ export default function DsrMemoryPage(){
       </tr>;
      })}
     </tbody></table></div>}
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Conferência diária da jornada</h2><p>Compara o padrão da escala vigente com o apontamento de cada data. Dia sem registro não é classificado automaticamente como falta.</p></div><label>Colaborador<select value={selectedDailyEmployee} onChange={e=>setDailyEmployee(e.target.value)}><option value="">Selecione</option>{employees.map(x=><option key={x.id} value={x.id}>{x.employee_code} · {x.full_name}</option>)}</select></label></div>
+    {!selectedDailyEmployee?<div className="employee-empty"><CalendarDays size={22}/><b>Selecione um colaborador</b></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Data</th><th>Escala</th><th>Dia previsto</th><th>Apontamento</th><th>Horas trabalhadas</th><th>Situação</th></tr></thead><tbody>{dailyRows.map(row=><tr key={row.date}><td>{row.dayLabel}</td><td>{row.scheduleLabel}</td><td>{row.dayType}</td><td>{row.occurrenceLabel}</td><td>{row.hoursLabel}</td><td><span className="status-pill">{row.statusLabel}{row.alert?" · conferir":""}</span></td></tr>)}</tbody></table></div>}
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Matriz de incidência das rubricas</h2><p>Conferência cadastral das rubricas ativas. A marcação de incidência não substitui a validação da norma aplicável.</p></div><span>{rubrics.length} rubrica(s)</span></div>
