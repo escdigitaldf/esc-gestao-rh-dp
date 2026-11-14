@@ -176,7 +176,7 @@ export default function DsrMemoryPage(){
   return {checks,blockers:checks.filter(x=>!x.ok).length};
  },[month,schedules,dsrRules,events,competenceAudit]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
- const eventAudit=(event:VariableEvent)=>{
+ function eventAudit(event:VariableEvent){
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
   if(!rubric)return "Rubrica de origem não localizada entre as ativas";
   if(!rubric.active||!rubric.affects_dsr||rubric.item_type!=="earning"||rubric.dsr_category!==event.dsr_category||rubric.code!==event.code||rubric.description!==event.description||event.item_type!==rubric.item_type)return "Divergência entre evento e cadastro da rubrica";
@@ -187,7 +187,7 @@ export default function DsrMemoryPage(){
   if(!applicableRuleIds.length)return "Sem escala e regra normativa validadas na data do evento";
   const hasParameter=categoryParameters.some(parameter=>applicableRuleIds.includes(parameter.dsr_rule_id)&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
- };
+ }
  const registerReview=async()=>{
   if(reviewNote.trim().length<20){setError("Informe uma observação de conferência com pelo menos 20 caracteres.");return;}
   if(!organizationId||!currentUserId){setError("Não foi possível identificar a organização ou o responsável.");return;}
