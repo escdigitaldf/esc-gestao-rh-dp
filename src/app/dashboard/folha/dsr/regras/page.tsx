@@ -121,7 +121,9 @@ export default function DsrRulesPage(){
   setValidating(rule.id);
   try{
    const s=createClient();
-   const {data,error:e}=await s.from("organization_dsr_rules").update({status:"validated",validation_notes:note}).eq("id",rule.id).eq("organization_id",org).eq("status","pending_validation").select("id").maybeSingle();
+   const {data:{user},error:authError}=await s.auth.getUser();
+   if(authError||!user)throw new Error("Sessão expirada. Entre novamente para validar a regra.");
+   const {data,error:e}=await s.from("organization_dsr_rules").update({status:"validated",validation_notes:note,validated_by:user.id,validated_at:new Date().toISOString()}).eq("id",rule.id).eq("organization_id",org).eq("status","pending_validation").select("id").maybeSingle();
    if(e)throw e;
    if(!data)throw new Error("A regra não foi atualizada. Atualize a página e confira se outro usuário alterou o status.");
    setValidationDrafts(current=>({...current,[rule.id]:""}));
