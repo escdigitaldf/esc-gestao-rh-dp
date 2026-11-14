@@ -8,6 +8,9 @@ type Employee={id:string;employee_code:string;full_name:string;employment_status
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
+type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
+type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
+type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_reference:string|null;version:number};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
@@ -24,6 +27,9 @@ export default function DsrMemoryPage(){
  const [schedules,setSchedules]=useState<Schedule[]>([]);
  const [occurrences,setOccurrences]=useState<Occurrence[]>([]);
  const [events,setEvents]=useState<VariableEvent[]>([]);
+ const [rubrics,setRubrics]=useState<Rubric[]>([]);
+ const [dsrRules,setDsrRules]=useState<DsrRule[]>([]);
+ const [categoryParameters,setCategoryParameters]=useState<CategoryParameter[]>([]);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
  const [refreshed,setRefreshed]=useState("");
@@ -37,18 +43,24 @@ export default function DsrMemoryPage(){
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
   const start=month+"-01";
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
-   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date")
+   s.from("payroll_variable_events").select("id,employee_id,code,description,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
+   s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
+   s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
+   s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category")
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
   setOccurrences((occ.data||[]) as Occurrence[]);
   setEvents((ev.data||[]) as VariableEvent[]);
+  setRubrics((rub.data||[]) as Rubric[]);
+  setDsrRules((rule.data||[]) as DsrRule[]);
+  setCategoryParameters((param.data||[]) as CategoryParameter[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -65,6 +77,8 @@ export default function DsrMemoryPage(){
    validated:employeeOccurrences.filter(x=>x.record_status==="validated").length,
    rejected:employeeOccurrences.filter(x=>x.record_status==="rejected").length};
  }),[employees,schedules,occurrences,events]);
+ const rulesInUse=useMemo(()=>dsrRules.filter(rule=>schedules.some(schedule=>schedule.dsr_rule_id===rule.id)),[dsrRules,schedules]);
+ const categoryLabel=(v:string)=>dsrCategoryName(v);
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length,processedEvents:events.filter(x=>x.status==="processed").length,approvedAmount:events.filter(x=>x.status==="approved").reduce((a,x)=>a+eventAmount(x),0)}),[occurrences,schedules,events]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
@@ -104,6 +118,26 @@ export default function DsrMemoryPage(){
       </tr>;
      })}
     </tbody></table></div>}
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Matriz de incidência das rubricas</h2><p>Conferência cadastral das rubricas ativas. A marcação de incidência não substitui a validação da norma aplicável.</p></div><span>{rubrics.length} rubrica(s)</span></div>
+    {!rubrics.length?<div className="employee-empty"><ClipboardList size={22}/><b>Nenhuma rubrica ativa cadastrada</b><p>Cadastre e classifique as rubricas antes de habilitar eventos variáveis.</p></div>:
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Código / Rubrica</th><th>Tipo</th><th>Incidência cadastrada</th><th>Categoria DSR</th><th>Conferência</th></tr></thead><tbody>{rubrics.map(r=><tr key={r.id}><td><b>{r.code}</b><br/><small>{r.description}</small></td><td>{r.item_type==="earning"?"Provento":r.item_type==="deduction"?"Desconto":"Encargo patronal"}</td><td>{r.affects_dsr?"Sim":"Não"}</td><td>{categoryLabel(r.dsr_category)}</td><td>{r.affects_dsr&&r.item_type!=="earning"?"Inconsistência: incidência exige provento":r.affects_dsr&&r.dsr_category==="not_applicable"?"Categoria não definida":r.affects_dsr?"Exige parâmetro normativo validado":"Fora da base variável de DSR"}</td></tr>)}</tbody></table></div>}
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Regras normativas vinculadas às escalas</h2><p>Exibe a situação da regra e dos parâmetros por categoria, sem presumir direito ou fórmula universal.</p></div><span>{rulesInUse.length} regra(s) em uso</span></div>
+    {!rulesInUse.length?<div className="employee-empty"><ShieldAlert size={22}/><b>Nenhuma regra normativa vinculada às escalas do período</b><p>Vincule a escala a uma regra validada e vigente para a competência.</p></div>:
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra / Fonte</th><th>Categoria profissional</th><th>Vigência na competência</th><th>Status</th><th>Parâmetros de parcelas variáveis</th></tr></thead><tbody>{rulesInUse.map(rule=>{
+      const validFrom=!rule.validity_from||rule.validity_from<=month+"-01";
+      const validTo=!rule.validity_to||rule.validity_to>=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+      const ruleCurrent=validFrom&&validTo;
+      const params=categoryParameters.filter(p=>p.dsr_rule_id===rule.id&&p.effective_from<=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)&&(!p.effective_to||p.effective_to>=month+"-01"));
+      const parameterText=["overtime","commission","additional","bonus","other"].map(cat=>{
+       const p=params.filter(x=>x.category===cat&&x.status==="validated").sort((a,b)=>b.version-a.version)[0];
+       return categoryLabel(cat)+": "+(p?(p.unit==="days"?"por dias":"por horas")+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR"):"sem parâmetro validado");
+      });
+      return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="validated"&&ruleCurrent?"Validada e vigente":rule.status==="suspended"?"Suspensa":rule.status==="validated"?"Validada, fora da vigência":"Pendente de validação"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td></tr>;
+    })}</tbody></table></div>}
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Eventos variáveis com incidência de DSR</h2><p>Valores são exibidos apenas para conferência da base informativa; não representam DSR calculado.</p></div><span>{events.length} evento(s)</span></div>
