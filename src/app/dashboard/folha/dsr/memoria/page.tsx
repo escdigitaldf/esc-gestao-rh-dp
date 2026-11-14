@@ -5,7 +5,7 @@ import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "
 import {createClient} from "@/lib/supabase/client";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
-type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null};
+type Schedule={id:string;employee_id:string;dsr_rule_id:string|null;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;code:string;description:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
 type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
@@ -45,7 +45,7 @@ export default function DsrMemoryPage(){
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const [emp,sch,occ,ev,rub,rule,param]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
-   s.from("employee_work_schedules").select("id,employee_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
+   s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,code,description,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
