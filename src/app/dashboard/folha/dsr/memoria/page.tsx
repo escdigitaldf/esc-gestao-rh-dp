@@ -11,7 +11,9 @@ type VariableEvent={id:string;employee_id:string;code:string;description:string;
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
-const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});\nconst eventAmount=(x:VariableEvent)=>Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0)));\nconst dsrCategoryName=(v:string)=>({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios/bonificações",other:"Outras parcelas",not_applicable:"Não aplicável"} as Record<string,string>)[v]||v;
+const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const eventAmount=(x:VariableEvent)=>Number(x.amount??(Number(x.quantity||0)*Number(x.unit_value||0)));
+const dsrCategoryName=(v:string)=>({overtime:"Horas extras",commission:"Comissões",additional:"Adicionais",bonus:"Prêmios/bonificações",other:"Outras parcelas",not_applicable:"Não aplicável"} as Record<string,string>)[v]||v;
 const hours=(v:number)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" h";
 const typeName=(v:string)=>({fixed_weekly:"Semanal fixa",rotating:"Revezamento",twelve_by_thirty_six:"12x36",custom:"Personalizada"} as Record<string,string>)[v]||v;
 
@@ -77,7 +79,9 @@ export default function DsrMemoryPage(){
     <div><span>Ocorrências validadas</span><b>{totals.validated}</b></div>
     <div><span>Pendentes de validação</span><b>{totals.draft}</b></div>
     <div><span>Escalas sem regra validada</span><b>{totals.unvalidatedSchedules}</b></div>
-    <div><span>Eventos DSR aprovados</span><b>{totals.approvedEvents}</b></div>\n    <div><span>Eventos já processados</span><b>{totals.processedEvents}</b></div>\n    <div><span>Base variável aprovada (informativa)</span><b>{money(totals.approvedAmount)}</b></div>
+    <div><span>Eventos DSR aprovados</span><b>{totals.approvedEvents}</b></div>
+    <div><span>Eventos já processados</span><b>{totals.processedEvents}</b></div>
+    <div><span>Base variável aprovada (informativa)</span><b>{money(totals.approvedAmount)}</b></div>
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Consolidação por colaborador</h2><p>Horas abaixo consideram somente ocorrências validadas.</p></div><span>{summaries.length} colaborador(es)</span></div>
