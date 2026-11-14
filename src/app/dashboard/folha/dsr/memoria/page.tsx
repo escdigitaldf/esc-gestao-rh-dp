@@ -128,15 +128,17 @@ export default function DsrMemoryPage(){
     <div className="employee-list-head"><div><h2>Regras normativas vinculadas às escalas</h2><p>Exibe a situação da regra e dos parâmetros por categoria, sem presumir direito ou fórmula universal.</p></div><span>{rulesInUse.length} regra(s) em uso</span></div>
     {!rulesInUse.length?<div className="employee-empty"><ShieldAlert size={22}/><b>Nenhuma regra normativa vinculada às escalas do período</b><p>Vincule a escala a uma regra validada e vigente para a competência.</p></div>:
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra / Fonte</th><th>Categoria profissional</th><th>Vigência na competência</th><th>Status</th><th>Parâmetros de parcelas variáveis</th></tr></thead><tbody>{rulesInUse.map(rule=>{
-      const validFrom=!rule.validity_from||rule.validity_from<=month+"-01";
-      const validTo=!rule.validity_to||rule.validity_to>=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+      const competenceStart=month+"-01";
+      const competenceEnd=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+      const validFrom=Boolean(rule.validity_from&&rule.validity_from<=competenceStart);
+      const validTo=!rule.validity_to||rule.validity_to>=competenceEnd;
       const ruleCurrent=validFrom&&validTo;
       const params=categoryParameters.filter(p=>p.dsr_rule_id===rule.id&&p.effective_from<=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)&&(!p.effective_to||p.effective_to>=month+"-01"));
       const parameterText=["overtime","commission","additional","bonus","other"].map(cat=>{
        const p=params.filter(x=>x.category===cat&&x.status==="validated").sort((a,b)=>b.version-a.version)[0];
        return categoryLabel(cat)+": "+(p?(p.unit==="days"?"por dias":"por horas")+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR"):"sem parâmetro validado");
       });
-      return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="validated"&&ruleCurrent?"Validada e vigente":rule.status==="suspended"?"Suspensa":rule.status==="validated"?"Validada, fora da vigência":"Pendente de validação"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td></tr>;
+      return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{!rule.validity_from?"Vigência inicial não informada":ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="suspended"?"Suspensa":rule.status!=="validated"?"Pendente de validação":!rule.validity_from?"Validade incompleta":ruleCurrent?"Validada e vigente":"Validada, fora da vigência"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td></tr>;
     })}</tbody></table></div>}
    </div>
    <div className="employee-list-card payroll-list">
