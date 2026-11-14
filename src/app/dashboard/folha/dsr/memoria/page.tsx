@@ -48,7 +48,7 @@ export default function DsrMemoryPage(){
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const [emp,sch,occ,ev,rub,rule,param,hol]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
-   s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
+   s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
@@ -110,6 +110,47 @@ export default function DsrMemoryPage(){
   }
   return rows;
  },[month,selectedDailyEmployee,schedules,occurrences,holidays]);
+ const competenceAudit=useMemo(()=>{
+  const year=Number(month.slice(0,4)),monthIndex=Number(month.slice(5,7))-1;
+  const count=new Date(year,monthIndex+1,0).getDate();
+  const today=new Date().toISOString().slice(0,10);
+  const results:{date:string;employee:string;employeeCode:string;issue:string;detail:string}[]=[];
+  for(const employee of employees){
+   if(employee.employment_status!=="active")continue;
+   for(let day=1;day<=count;day++){
+    const date=year+"-"+String(monthIndex+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+    if(date>today)continue;
+    const active=schedules.filter(x=>x.employee_id===employee.id&&x.effective_from<=date&&(!x.effective_to||x.effective_to>=date));
+    const occurrence=occurrences.find(x=>x.employee_id===employee.id&&x.occurrence_date===date);
+    if(active.length>1){results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Escalas sobrepostas",detail:"Mais de uma escala cobre esta data."});continue;}
+    if(active.length===0){if(occurrence)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Ocorrência sem escala vigente",detail:"O apontamento existe, mas não há escala vigente na data."});continue;}
+    const schedule=active[0];
+    if(schedule.dsr_rule_status!=="validated"||!schedule.dsr_rule_id)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Escala/regra pendente",detail:"A escala não possui regra normativa vinculada e validada."});
+    let scheduledDay:boolean|null=null;
+    if(schedule.schedule_type==="fixed_weekly"){
+     const weekday=new Date(date+"T12:00:00").getDay();
+     if((schedule.work_days||[]).includes(weekday))scheduledDay=true;
+     else if((schedule.weekly_rest_days||[]).includes(weekday))scheduledDay=false;
+    }else if(schedule.cycle_days&&schedule.cycle_days>0&&(schedule.cycle_pattern||[]).length===schedule.cycle_days){
+     const offset=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(schedule.effective_from+"T00:00:00Z"))/86400000);
+     const pattern=schedule.cycle_pattern[((offset%schedule.cycle_days)+schedule.cycle_days)%schedule.cycle_days];
+     if(pattern==="work")scheduledDay=true;else if(pattern==="rest")scheduledDay=false;
+    }
+    if(!occurrence){
+     if(scheduledDay===true)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Dia previsto sem apontamento",detail:"Pendência de registro/conferência; não é classificada automaticamente como falta."});
+     else if(scheduledDay===null)results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Dia sem classificação",detail:"O padrão cadastrado não permite determinar trabalho ou repouso com segurança."});
+     continue;
+    }
+    if(occurrence.record_status==="draft")results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Ocorrência em rascunho",detail:"O apontamento ainda depende de validação."});
+    if(occurrence.record_status==="rejected")results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Ocorrência rejeitada",detail:"Revisar e registrar a correção por procedimento auditável."});
+    const restTypes=["weekly_rest","compensatory_rest"];
+    if(scheduledDay===true&&restTypes.includes(occurrence.occurrence_type))results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Divergência de jornada",detail:"A escala prevê trabalho, mas o apontamento informa repouso/folga."});
+    if(scheduledDay===false&&occurrence.occurrence_type==="workday")results.push({date,employee:employee.full_name,employeeCode:employee.employee_code,issue:"Trabalho em repouso previsto",detail:"Conferir autorização, registro de horas e tratamento aplicável."});
+   }
+  }
+  return results.sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
+ },[month,employees,schedules,occurrences]);
+ const auditCounts=useMemo(()=>({missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  const eventAudit=(event:VariableEvent)=>{
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
@@ -162,6 +203,17 @@ export default function DsrMemoryPage(){
       </tr>;
      })}
     </tbody></table></div>}
+   </div>
+   <div className="employee-stats payroll-stats">
+    <div><span>Dias previstos sem apontamento</span><b>{auditCounts.missing}</b></div>
+    <div><span>Rascunhos/rejeitadas</span><b>{auditCounts.unresolved}</b></div>
+    <div><span>Conflitos/divergências</span><b>{auditCounts.conflicts}</b></div>
+    <div><span>Escalas sem regra validada</span><b>{auditCounts.unvalidated}</b></div>
+    <div><span>Dias sem classificação</span><b>{auditCounts.unclassified}</b></div>
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Pendências da competência</h2><p>Conferência de todos os colaboradores ativos, considerando somente datas até hoje. Pendências não são convertidas automaticamente em faltas ou descontos.</p></div><span>{competenceAudit.length} pendência(s)</span></div>
+    {!competenceAudit.length?<div className="employee-empty"><ClipboardList size={22}/><b>Nenhuma pendência identificada pelas regras atuais</b><p>Isso não substitui a conferência documental do DP nem valida automaticamente a competência.</p></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Data</th><th>Colaborador</th><th>Pendência</th><th>Detalhe / providência</th></tr></thead><tbody>{competenceAudit.map((item,index)=><tr key={item.date+"-"+item.employeeCode+"-"+item.issue+"-"+index}><td>{new Date(item.date+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><b>{item.employee}</b><br/><small>{item.employeeCode}</small></td><td><span className="status-pill">{item.issue}</span></td><td>{item.detail}</td></tr>)}</tbody></table></div>}
    </div>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Conferência diária da jornada</h2><p>Compara o padrão da escala vigente com o apontamento de cada data. Dia sem registro não é classificado automaticamente como falta.</p></div><label>Colaborador<select value={selectedDailyEmployee} onChange={e=>setDailyEmployee(e.target.value)}><option value="">Selecione</option>{employees.map(x=><option key={x.id} value={x.id}>{x.employee_code} · {x.full_name}</option>)}</select></label></div>
