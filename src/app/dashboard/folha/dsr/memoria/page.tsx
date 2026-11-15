@@ -14,6 +14,8 @@ type DsrRule={id:string;rule_name:string;professional_category:string|null;union
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_reference:string|null;version:number};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
+type ReviewDecision={id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string};
+type FormalReview={id:string;competence_month:string;revision:number;status:string;submitted_by:string;submitted_at:string;first_approved_by:string|null;first_approved_at:string|null;second_approved_by:string|null;second_approved_at:string|null;approved_at:string|null;blocker_count:number;submission_note:string;financial_calculation_released:boolean;dsr_competence_review_decisions:ReviewDecision[]};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -38,7 +40,9 @@ export default function DsrMemoryPage(){
  const [currentUserId,setCurrentUserId]=useState("");
  const [currentRole,setCurrentRole]=useState("");
  const [reviewHistory,setReviewHistory]=useState<ReviewLog[]>([]);
+ const [formalReviews,setFormalReviews]=useState<FormalReview[]>([]);
  const [reviewNote,setReviewNote]=useState("");
+ const [decisionNote,setDecisionNote]=useState("");
  const [savingReview,setSavingReview]=useState(false);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
@@ -54,7 +58,7 @@ export default function DsrMemoryPage(){
   const start=month+"-01";
   setOrganizationId(membership.organization_id);setCurrentUserId(user.id);setCurrentRole(membership.role||"");
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param,hol,history]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
@@ -63,9 +67,10 @@ export default function DsrMemoryPage(){
    s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
    s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
    s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end),
-   s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20)
+   s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20),
+   s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false})
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -76,6 +81,7 @@ export default function DsrMemoryPage(){
   setCategoryParameters((param.data||[]) as CategoryParameter[]);
   setHolidays((hol.data||[]) as Holiday[]);
   setReviewHistory((history.data||[]) as ReviewLog[]);
+  setFormalReviews((formal.data||[]) as unknown as FormalReview[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -194,15 +200,25 @@ export default function DsrMemoryPage(){
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
  }
  const registerReview=async()=>{
-  if(!canReview){setError("Seu perfil não possui permissão para registrar a conferência do DSR.");return;}
-  if(reviewNote.trim().length<20){setError("Informe uma observação de conferência com pelo menos 20 caracteres.");return;}
+  if(!canReview){setError("Seu perfil não possui permissão para submeter a conferência do DSR.");return;}
+  if(reviewChecks.blockers>0){setError("Existem pendências no checklist. Corrija-as antes de submeter a competência para revisão.");return;}
+  if(reviewNote.trim().length<20){setError("Informe uma observação com pelo menos 20 caracteres.");return;}
   if(!organizationId||!currentUserId){setError("Não foi possível identificar a organização ou o responsável.");return;}
   setSavingReview(true);setError("");
-  const blocked=reviewChecks.blockers>0;
   const s=createClient();
-  const {error:saveError}=await s.from("audit_logs").insert({organization_id:organizationId,actor_user_id:currentUserId,action:blocked?"dsr_competence_review_blocked":"dsr_competence_review_ready_for_manual_approval",resource_type:"dsr_competence_review",resource_id:month+"-01",metadata:{competence:month,status:blocked?"blocked":"ready_for_manual_approval",blockers:reviewChecks.blockers,checks:reviewChecks.checks,note:reviewNote.trim(),financial_calculation_released:false}});
-  if(saveError)setError("Não foi possível registrar a conferência: "+saveError.message);
+  const {error:saveError}=await s.rpc("submit_dsr_competence_review",{p_organization_id:organizationId,p_competence_month:month+"-01",p_checklist_snapshot:reviewChecks.checks,p_submission_note:reviewNote.trim()});
+  if(saveError)setError("Não foi possível submeter a conferência: "+saveError.message);
   else{setReviewNote("");await load();}
+  setSavingReview(false);
+ };
+ const decideReview=async(reviewId:string,decision:"approve"|"reject")=>{
+  if(!canReview){setError("Seu perfil não possui permissão para decidir a conferência.");return;}
+  if(decisionNote.trim().length<20){setError("A justificativa da decisão deve conter pelo menos 20 caracteres.");return;}
+  setSavingReview(true);setError("");
+  const s=createClient();
+  const {error:decisionError}=await s.rpc("decide_dsr_competence_review",{p_review_id:reviewId,p_decision:decision,p_note:decisionNote.trim()});
+  if(decisionError)setError("Não foi possível registrar a decisão: "+decisionError.message);
+  else{setDecisionNote("");await load();}
   setSavingReview(false);
  };
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length,processedEvents:events.filter(x=>x.status==="processed").length,approvedAmount:events.filter(x=>x.status==="approved").reduce((a,x)=>a+eventAmount(x),0)}),[occurrences,schedules,events]);
@@ -256,10 +272,11 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Checklist técnico para conferência</h2><p>Os critérios abaixo controlam a prontidão documental. Mesmo sem pendências, a aprovação final do DP e o cálculo financeiro continuam separados.</p></div><span>{reviewChecks.blockers===0?"Sem bloqueios identificados":reviewChecks.blockers+" bloqueio(s)"}</span></div>
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Critério</th><th>Resultado</th><th>Detalhe</th></tr></thead><tbody>{reviewChecks.checks.map(check=><tr key={check.label}><td>{check.label}</td><td><span className="status-pill">{check.ok?"Conferido":"Pendente"}</span></td><td>{check.detail}</td></tr>)}</tbody></table></div>
-    <p className="form-hint">Perfil atual: <b>{currentRole||"não identificado"}</b> · {canReview?"Pode registrar conferência.":"Apenas consulta; registro restrito a owner, admin, gerente de RH ou folha."}</p>
+    <p className="form-hint">Perfil atual: <b>{currentRole||"não identificado"}</b> · {canReview?"Pode submeter ou decidir revisão, conforme a etapa.":"Apenas consulta; ações restritas a owner, admin, gerente de RH ou folha."}</p>
     <label className="review-note-label">Observação do responsável pela conferência<textarea value={reviewNote} onChange={e=>setReviewNote(e.target.value)} minLength={20} placeholder="Registre a análise realizada, documentos verificados e providências..." rows={3}/></label>
-    <button className="employee-primary" onClick={()=>void registerReview()} disabled={savingReview||!canReview}>{savingReview?"Registrando...":"Registrar conferência da competência"}</button>
-    <p className="form-hint">O registro cria histórico de auditoria com responsável, data/hora, checklist e observação. Não fecha a competência, não aprova automaticamente regras e não libera o cálculo financeiro.</p>
+    <button className="employee-primary" onClick={()=>void registerReview()} disabled={savingReview||!canReview||reviewChecks.blockers>0}>{savingReview?"Enviando...":"Submeter competência para primeira revisão"}</button>
+    <p className="form-hint">A submissão exige checklist sem bloqueios declarados. A aprovação exige duas decisões de usuários distintos e não fecha a competência nem libera o cálculo financeiro.</p>
+    {formalReviews.length>0&&<><h3>Fluxo formal de revisão</h3>{formalReviews.map(review=><div className="dependent-privacy" key={review.id}><div style={{width:"100%"}}><b>Revisão {review.revision} · {review.status==="awaiting_first_review"?"Aguardando primeira revisão":review.status==="awaiting_second_review"?"Aguardando segunda revisão":review.status==="approved"?"Aprovada por dois responsáveis":"Rejeitada"}</b><p>Enviada em {new Date(review.submitted_at).toLocaleString("pt-BR")} · responsável: {review.submitted_by} · bloqueios declarados: {review.blocker_count}</p><p>{review.submission_note}</p>{review.dsr_competence_review_decisions?.map(decision=><p key={decision.id}>{decision.decision==="approve"?"Aprovada por":"Rejeitada por"} {decision.reviewer_user_id} em {new Date(decision.created_at).toLocaleString("pt-BR")}: {decision.note}</p>)}{review.financial_calculation_released&&<p><b>ATENÇÃO: liberação financeira registrada.</b></p>}{canReview&&review.blocker_count===0&&(review.status==="awaiting_first_review"||review.status==="awaiting_second_review")&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="employee-primary" disabled={savingReview||decisionNote.trim().length<20} onClick={()=>void decideReview(review.id,"approve")}>{review.status==="awaiting_first_review"?"Registrar primeira aprovação":"Registrar segunda aprovação"}</button><button className="employee-secondary" disabled={savingReview||decisionNote.trim().length<20} onClick={()=>void decideReview(review.id,"reject")}>Rejeitar revisão</button></div>}</div></div>)}<label className="review-note-label">Justificativa da decisão<textarea value={decisionNote} onChange={e=>setDecisionNote(e.target.value)} minLength={20} placeholder="Registre os fundamentos da aprovação ou rejeição..." rows={3}/></label></>}
     {reviewHistory.length>0&&<><h3>Histórico de conferências</h3><div className="table-scroll"><table className="employee-table"><thead><tr><th>Data/hora</th><th>Responsável (ID)</th><th>Resultado</th><th>Observação</th></tr></thead><tbody>{reviewHistory.map((log,index)=><tr key={log.created_at+"-"+index}><td>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td>{log.actor_user_id||"—"}</td><td><span className="status-pill">{log.action==="dsr_competence_review_blocked"?"Registrado com bloqueios":log.action==="dsr_competence_review_ready_for_manual_approval"?"Pronto para aprovação manual":log.action}</span></td><td>{String(log.metadata?.note||"—")}</td></tr>)}</tbody></table></div></>}
    </div>
    <div className="employee-list-card payroll-list">
