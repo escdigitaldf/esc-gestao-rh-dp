@@ -84,8 +84,8 @@ begin
   if extract(day from p_competence_month) <> 1 then
     raise exception 'A competência deve ser informada pelo primeiro dia do mês.';
   end if;
-  if jsonb_typeof(p_checklist_snapshot) <> 'array' then
-    raise exception 'O checklist deve ser enviado como uma lista de verificações.';
+  if jsonb_typeof(p_checklist_snapshot) <> 'array' or jsonb_array_length(p_checklist_snapshot) < 4 then
+    raise exception 'O checklist deve conter ao menos quatro verificações.';
   end if;
   if length(btrim(coalesce(p_submission_note,''))) < 20 then
     raise exception 'A observação de envio deve conter ao menos 20 caracteres.';
@@ -100,14 +100,15 @@ begin
   end if;
 
   if exists (
-    select 1 from jsonb_array_elements(p_checklist_snapshot) item
+    select 1 from jsonb_array_elements(p_checklist_snapshot) as elements(item)
     where jsonb_typeof(item->'ok') <> 'boolean'
+       or jsonb_typeof(item->'label') <> 'string'
   ) then
     raise exception 'Cada item do checklist deve conter resultado booleano.';
   end if;
 
   select count(*)::integer into v_blockers
-  from jsonb_array_elements(p_checklist_snapshot) item
+  from jsonb_array_elements(p_checklist_snapshot) as elements(item)
   where (item->>'ok')::boolean is false;
 
   perform pg_advisory_xact_lock(hashtextextended(p_organization_id::text || ':' || p_competence_month::text, 0));
@@ -153,7 +154,7 @@ declare
   v_next_status text;
 begin
   if v_user is null then raise exception 'Autenticação obrigatória.'; end if;
-  if p_decision not in ('approve','reject') then
+  if coalesce(p_decision,'') not in ('approve','reject') then
     raise exception 'Decisão inválida.';
   end if;
   if length(btrim(coalesce(p_note,''))) < 20 then
@@ -183,9 +184,6 @@ begin
   end if;
 
   if v_review.status = 'awaiting_first_review' then
-    if v_user = v_review.submitted_by then
-      raise exception 'O responsável pelo envio não pode realizar a primeira aprovação.';
-    end if;
     v_next_status := case when p_decision = 'approve' then 'awaiting_second_review' else 'rejected' end;
     update public.dsr_competence_reviews
     set status = v_next_status,
@@ -193,8 +191,8 @@ begin
         first_approved_at = case when p_decision = 'approve' then statement_timestamp() else null end
     where id = p_review_id returning * into v_review;
   else
-    if v_user = v_review.submitted_by or v_user = v_review.first_approved_by then
-      raise exception 'A segunda aprovação exige um terceiro responsável, diferente do solicitante e do primeiro aprovador.';
+    if v_user = v_review.first_approved_by then
+      raise exception 'A segunda aprovação exige um responsável diferente do primeiro aprovador.';
     end if;
     v_next_status := case when p_decision = 'approve' then 'approved' else 'rejected' end;
     update public.dsr_competence_reviews
