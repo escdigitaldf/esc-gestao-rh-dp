@@ -241,19 +241,14 @@ export default function DsrMemoryPage(){
   const start=month+"-01",end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
   const activeEmployeeIds=new Set(employees.filter(employee=>employee.employment_status==="active").map(employee=>employee.id));
   const activeSchedules=schedules.filter(s=>activeEmployeeIds.has(s.employee_id)&&s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
-  const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated"&&rule.validity_from&&rule.validity_from<=start&&(!rule.validity_to||rule.validity_to>=end));});
+  const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated");});
   const eventAudits=events.map(eventAudit);
   const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
   const pendingEvents=events.filter(x=>x.status==="pending").length;
   const reconciliationBlockers=reconciliationRows.filter(x=>!["reconciled","rejected_not_posted"].includes(x.reconciliation_status)).length;
   const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
   const scheduledEmployeeIds=[...new Set(activeSchedules.map(s=>s.employee_id))];
-  const normativeCoverage=scheduledEmployeeIds.map(employeeId=>{
-   const employeeAssignments=normativeAssignments.filter(a=>a.employee_id===employeeId&&a.validity_from<=start&&(!a.validity_to||a.validity_to>=end));
-   const employeeSchedules=activeSchedules.filter(s=>s.employee_id===employeeId);
-   return employeeAssignments.length===1&&employeeSchedules.every(s=>s.dsr_rule_id===employeeAssignments[0].dsr_rule_id);
-  });
-  const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);
+  const normativeCoverageOk=scheduledEmployeeIds.length>0&&temporalNormativeAudit.length===0;
   const rulesInScope=dsrRules.filter(rule=>activeSchedules.some(schedule=>schedule.dsr_rule_id===rule.id));
   const sourceDocsOk=rulesInScope.every(rule=>ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id)||(["law","internal_policy"].includes(rule.source_type)&&Boolean(rule.document_reference?.trim()&&rule.rule_summary?.trim())));
   const parameterSourcesOk=categoryParameters
@@ -270,7 +265,7 @@ export default function DsrMemoryPage(){
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
-   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},
+   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+(temporalNormativeAudit.length===0?"cobertura diária compatível":temporalNormativeAudit.length+" divergência(s) temporal(is)")},
    {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
    {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
