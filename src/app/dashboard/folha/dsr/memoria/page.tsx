@@ -13,6 +13,7 @@ type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:stri
 type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
 type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_reference:string|null;version:number};
+type ReconciliationCheck={reconciliation_status:string};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
 type ReviewDecision={id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string};
@@ -44,6 +45,8 @@ export default function DsrMemoryPage(){
  const [currentRole,setCurrentRole]=useState("");
  const [reviewHistory,setReviewHistory]=useState<ReviewLog[]>([]);
  const [formalReviews,setFormalReviews]=useState<FormalReview[]>([]);
+ const [reconciliationRows,setReconciliationRows]=useState<ReconciliationCheck[]>([]);
+ const [reconciliationQueryError,setReconciliationQueryError]=useState(false);
  const [reviewNote,setReviewNote]=useState("");
  const [decisionNote,setDecisionNote]=useState("");
  const [reopenNote,setReopenNote]=useState("");
@@ -80,9 +83,10 @@ export default function DsrMemoryPage(){
    s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end),
    s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20),
    s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false}),
-   s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).order("requested_at",{ascending:false}).limit(100)
+   s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).order("requested_at",{ascending:false}).limit(100),
+   s.from("dsr_payroll_reconciliation").select("reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",start)
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error||reconciliation.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -95,6 +99,8 @@ export default function DsrMemoryPage(){
   setReviewHistory((history.data||[]) as ReviewLog[]);
   setFormalReviews((formal.data||[]) as unknown as FormalReview[]);
   setCorrections((correctionRows.data||[]) as unknown as HistoricalCorrection[]);
+  setReconciliationRows((reconciliation.data||[]) as ReconciliationCheck[]);
+  setReconciliationQueryError(Boolean(reconciliation.error));
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -191,14 +197,17 @@ export default function DsrMemoryPage(){
   const eventAudits=events.map(eventAudit);
   const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
   const pendingEvents=events.filter(x=>x.status==="pending").length;
+  const reconciliationBlockers=reconciliationRows.filter(x=>x.reconciliation_status!=="reconciled").length;
+  const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
-   {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"}
+   {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
+   {label:"Conciliação dos eventos DSR com os lançamentos da folha",ok:reconciliationOk,detail:reconciliationQueryError?"Não foi possível consultar a visão de conciliação":reconciliationRows.length+" registro(s) conferido(s) · "+reconciliationBlockers+" divergência(s) ou pendência(s)"}
   ];
   return {checks,blockers:checks.filter(x=>!x.ok).length};
- },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters]);
+ },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  function eventAudit(event:VariableEvent){
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
