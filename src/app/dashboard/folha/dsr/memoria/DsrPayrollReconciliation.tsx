@@ -8,12 +8,12 @@ type ReconciliationRow={
  competence_month:string;event_date:string|null;code:string;description:string;item_type:string;quantity:number;quantity_unit:string;unit_value:number;event_amount:number;event_status:string;
  processed_entry_id:string|null;event_affects_inss:boolean;event_affects_irrf:boolean;event_affects_fgts:boolean;event_affects_dsr:boolean;
  rubric_id:string|null;rubric_active:boolean|null;rubric_item_type:string|null;rubric_affects_inss:boolean|null;rubric_affects_irrf:boolean|null;rubric_affects_fgts:boolean|null;rubric_affects_dsr:boolean|null;
- payroll_item_count:number;payroll_item_amount:number;payroll_competences:string[]|null;payroll_run_statuses:string[]|null;payroll_entry_statuses:string[]|null;payroll_entry_ids:string[]|null;
+ calculated_event_amount:number;event_composition_difference:number;payroll_item_count:number;payroll_item_amount:number;payroll_competences:string[]|null;payroll_run_statuses:string[]|null;payroll_entry_statuses:string[]|null;payroll_entry_ids:string[]|null;
  item_inss_mismatch:boolean;item_irrf_mismatch:boolean;item_fgts_mismatch:boolean;item_dsr_mismatch:boolean;rubric_incidence_mismatch:boolean;reconciliation_status:string;
 };
 const statusLabel:Record<string,string>={
  reconciled:"Conciliado",awaiting_approval:"Aguardando aprovação",approved_not_posted:"Aprovado · não lançado",
- processed_without_item:"Processado sem item na folha",not_posted:"Evento não lançado",duplicate_posting:"Possível duplicidade",
+ processed_without_item:"Processado sem item na folha",not_posted:"Evento não lançado",rejected_not_posted:"Evento rejeitado · sem lançamento",event_composition_mismatch:"Quantidade × valor unitário divergente",duplicate_posting:"Possível duplicidade",
  amount_mismatch:"Divergência de valor",competence_mismatch:"Competência divergente",
  event_status_mismatch:"Status do evento divergente",rejected_event_posted:"Evento rejeitado com lançamento",
  event_without_rubric:"Evento sem rubrica vinculada",inactive_rubric:"Rubrica inativa",rubric_type_mismatch:"Tipo de rubrica divergente",
@@ -33,7 +33,7 @@ export default function DsrPayrollReconciliation({month}:{month:string}){
   if(authError||!user){setError("Sessão não identificada.");setLoading(false);return;}
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização não encontrada.");setLoading(false);return;}
-  const {data,error:queryError}=await s.from("payroll_variable_event_reconciliation").select("variable_event_id,organization_id,employee_id,employee_code,employee_name,competence_month,event_date,code,description,item_type,quantity,quantity_unit,unit_value,event_amount,event_status,processed_entry_id,event_affects_inss,event_affects_irrf,event_affects_fgts,event_affects_dsr,rubric_id,rubric_active,rubric_item_type,rubric_affects_inss,rubric_affects_irrf,rubric_affects_fgts,rubric_affects_dsr,payroll_item_count,payroll_item_amount,payroll_competences,payroll_run_statuses,payroll_entry_statuses,payroll_entry_ids,item_inss_mismatch,item_irrf_mismatch,item_fgts_mismatch,item_dsr_mismatch,rubric_incidence_mismatch,reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",month+"-01").order("employee_name").order("code");
+  const {data,error:queryError}=await s.from("payroll_variable_event_reconciliation").select("variable_event_id,organization_id,employee_id,employee_code,employee_name,competence_month,event_date,code,description,item_type,quantity,quantity_unit,unit_value,event_amount,event_status,processed_entry_id,event_affects_inss,event_affects_irrf,event_affects_fgts,event_affects_dsr,rubric_id,rubric_active,rubric_item_type,rubric_affects_inss,rubric_affects_irrf,rubric_affects_fgts,rubric_affects_dsr,calculated_event_amount,event_composition_difference,payroll_item_count,payroll_item_amount,payroll_competences,payroll_run_statuses,payroll_entry_statuses,payroll_entry_ids,item_inss_mismatch,item_irrf_mismatch,item_fgts_mismatch,item_dsr_mismatch,rubric_incidence_mismatch,reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",month+"-01").order("employee_name").order("code");
   if(queryError)setError(queryError.message);
   setRows((data||[]) as ReconciliationRow[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
@@ -44,7 +44,7 @@ export default function DsrPayrollReconciliation({month}:{month:string}){
   total:rows.length,
   reconciled:rows.filter(x=>x.reconciliation_status==="reconciled").length,
   blockers:rows.filter(x=>x.reconciliation_status!=="reconciled").length,
-  pending:rows.filter(x=>["awaiting_approval","approved_not_posted","not_posted"].includes(x.reconciliation_status)).length,
+  pending:rows.filter(x=>["awaiting_approval","approved_not_posted","not_posted","rejected_not_posted"].includes(x.reconciliation_status)).length,
   anomalies:rows.filter(x=>x.reconciliation_status!=="reconciled"&&!["awaiting_approval","approved_not_posted","not_posted"].includes(x.reconciliation_status)).length
  }),[rows]);
  return <section className="employee-list-card payroll-list">
@@ -62,7 +62,7 @@ export default function DsrPayrollReconciliation({month}:{month:string}){
      <td><b>{row.employee_name||"Colaborador não identificado"}</b><br/><small>{row.employee_code||"—"}</small></td>
      <td>{row.code} · {row.description}<br/><small>{row.rubric_id?(row.rubric_active?"Rubrica ativa":"Rubrica inativa"):"Sem rubrica"} · {row.rubric_item_type||"tipo não identificado"}</small></td>
      <td>{({pending:"Pendente",approved:"Aprovado",processed:"Processado",rejected:"Rejeitado"} as Record<string,string>)[row.event_status]||row.event_status}</td>
-     <td>{Number(row.quantity).toLocaleString("pt-BR")} {row.quantity_unit==="hours"?"h":row.quantity_unit==="days"?"dias":"unid."} × {money(row.unit_value)}<br/><b>{money(row.event_amount)}</b></td>
+     <td>{Number(row.quantity).toLocaleString("pt-BR")} {row.quantity_unit==="hours"?"h":row.quantity_unit==="days"?"dias":"unid."} × {money(row.unit_value)}<br/><b>{money(row.event_amount)}</b><br/><small>Recalculado: {money(row.calculated_event_amount)} · Diferença: {money(row.event_composition_difference)}</small></td>
      <td><small>INSS: {row.event_affects_inss?"Sim":"Não"} · {row.payroll_item_count?(row.item_inss_mismatch?"diverge":"confere"):"sem lançamento"}<br/>IRRF: {row.event_affects_irrf?"Sim":"Não"} · {row.payroll_item_count?(row.item_irrf_mismatch?"diverge":"confere"):"sem lançamento"}<br/>FGTS: {row.event_affects_fgts?"Sim":"Não"} · {row.payroll_item_count?(row.item_fgts_mismatch?"diverge":"confere"):"sem lançamento"}<br/>DSR: {row.event_affects_dsr?"Sim":"Não"} · {row.payroll_item_count?(row.item_dsr_mismatch?"diverge":"confere"):"sem lançamento"}<br/>{!row.rubric_id?"Sem rubrica para validar":row.rubric_incidence_mismatch?"Evento diverge da configuração da rubrica":"Evento compatível com a rubrica"}</small></td>
      <td>{row.payroll_item_count}</td><td>{money(row.payroll_item_amount)}</td>
      <td>{row.payroll_competences?.length?row.payroll_competences.map(x=>new Date(x+"T12:00:00").toLocaleDateString("pt-BR",{month:"2-digit",year:"numeric"})).join(", "):"—"}</td>
