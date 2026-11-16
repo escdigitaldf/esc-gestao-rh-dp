@@ -10,7 +10,7 @@ type Employee={id:string;employee_code:string;full_name:string;employment_status
 type Schedule={id:string;employee_id:string;dsr_rule_id:string|null;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null;work_days:number[];weekly_rest_days:number[];cycle_pattern:string[]};
 type Holiday={id:string;holiday_date:string;name:string;holiday_scope:string;state_code:string|null;city:string|null;is_optional_workday:boolean};
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
-type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
+type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:string;competence:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
 type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
 type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;document_reference:string|null;rule_summary:string|null;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_document_id:string|null;source_reference:string|null;version:number};
@@ -81,7 +81,7 @@ export default function DsrMemoryPage(){
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("dsr_effective_employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("dsr_effective_employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
-   s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
+   s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,competence,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
    s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,source_identifier,document_reference,rule_summary,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
    s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_document_id,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
@@ -251,6 +251,8 @@ export default function DsrMemoryPage(){
   const activeEmployeeIds=new Set(employees.filter(employee=>employee.employment_status==="active").map(employee=>employee.id));
   const activeSchedules=schedules.filter(s=>activeEmployeeIds.has(s.employee_id)&&s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
   const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated");});
+  const compositionAudits=events.map(eventCompositionAudit);
+  const eventCompositionOk=compositionAudits.every(x=>x.startsWith("Composição conferida"));
   const eventAudits=events.map(eventAudit);
   const eventOriginsOk=eventAudits.every(x=>x.startsWith("Rubrica e parâmetro normativo conferidos"));
   const parameterAudits=events.map(eventParameterAudit);
@@ -279,6 +281,7 @@ export default function DsrMemoryPage(){
    {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+(temporalNormativeAudit.length===0?"cobertura diária compatível":temporalNormativeAudit.length+" divergência(s) temporal(is)")},
    {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+normativeTransitions+" colaborador(es) com mudança de enquadramento segmentada · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
    {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
+   {label:"Composição matemática, valores e competência dos eventos",ok:eventCompositionOk,detail:compositionAudits.filter(x=>x.startsWith("Composição conferida")).length+" de "+events.length+" evento(s) consistentes · "+compositionAudits.filter(x=>!x.startsWith("Composição conferida")).slice(0,3).join(" | ")},
    {label:"Origem das rubricas e enquadramento normativo dos eventos",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Vigência, unicidade e integridade dos parâmetros por data do evento",ok:eventParametersOk,detail:parameterAudits.filter(x=>x.startsWith("Parâmetro normativo conferido")).length+" de "+events.length+" evento(s) com parâmetro único e válido · "+parameterAudits.filter(x=>!x.startsWith("Parâmetro normativo conferido")).slice(0,3).join(" | ")},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
@@ -287,11 +290,28 @@ export default function DsrMemoryPage(){
   return {checks,blockers:checks.filter(x=>!x.ok).length};
  },[month,employees,schedules,dsrRules,events,competenceAudit,temporalNormativeAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError,normativeAssignments,ruleDocuments]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
+ function eventCompositionAudit(event:VariableEvent){
+  const quantity=Number(event.quantity);
+  const unitValue=Number(event.unit_value);
+  const calculated=Math.round((quantity*unitValue+Number.EPSILON)*100)/100;
+  const stored=event.amount===null?null:Number(event.amount);
+  const competenceStart=month+"-01";
+  if(event.competence!==competenceStart)return "Competência do evento divergente da competência selecionada";
+  if(!event.event_date)return "Data do evento não informada; não é possível validar sua competência";
+  if(event.event_date.slice(0,7)!==month)return "Data do evento fora da competência informada";
+  if(!Number.isFinite(quantity)||quantity<=0)return "Quantidade inválida: deve ser maior que zero";
+  if(!Number.isFinite(unitValue)||unitValue<0)return "Valor unitário inválido: não pode ser negativo";
+  if(stored!==null&&(!Number.isFinite(stored)||stored<0))return "Total do evento inválido para rubrica de provento";
+  if(stored!==null&&Math.abs(stored-calculated)>0.0100001)return "Divergência matemática: quantidade × valor unitário = "+money(calculated)+", total gravado = "+money(stored);
+  return "Composição conferida · "+quantity.toLocaleString("pt-BR")+" × "+money(unitValue)+" = "+money(stored??calculated)+(stored===null?" · total estimado, não gravado":"")+(stored!==null&&Math.abs(stored-calculated)>0.000001?" · diferença dentro da tolerância de R$ 0,01":"");
+ }
  function eventAudit(event:VariableEvent){
+  const composition=eventCompositionAudit(event);
+  if(!composition.startsWith("Composição conferida"))return composition;
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
   if(!rubric)return "Rubrica de origem não localizada entre as ativas";
   if(!rubric.active||!rubric.affects_dsr||rubric.item_type!=="earning"||rubric.dsr_category!==event.dsr_category||rubric.code!==event.code||rubric.description!==event.description||event.item_type!==rubric.item_type)return "Divergência entre evento e cadastro da rubrica";
-  const eventDate=event.event_date||month+"-01";
+  const eventDate=event.event_date as string;
   const linkedSchedules=schedules.filter(schedule=>schedule.employee_id===event.employee_id&&schedule.dsr_rule_id&&schedule.dsr_rule_status==="validated"&&schedule.effective_from<=eventDate&&(!schedule.effective_to||schedule.effective_to>=eventDate));
   const validatedRuleIds=dsrRules.filter(rule=>rule.status==="validated"&&rule.validity_from&&rule.validity_from<=eventDate&&(!rule.validity_to||rule.validity_to>=eventDate)).map(rule=>rule.id);
   const applicableRuleIds=linkedSchedules.map(schedule=>schedule.dsr_rule_id).filter((id):id is string=>id!==null&&validatedRuleIds.includes(id));
@@ -305,7 +325,8 @@ export default function DsrMemoryPage(){
    :parameterStatus;
  }
  function eventParameterAudit(event:VariableEvent){
-  const eventDate=event.event_date||month+"-01";
+  if(!event.event_date)return "Parâmetro não auditável: data do evento ausente";
+  const eventDate=event.event_date;
   const assignments=normativeAssignments.filter(a=>a.employee_id===event.employee_id&&a.validity_from<=eventDate&&(!a.validity_to||a.validity_to>=eventDate));
   if(assignments.length!==1)return assignments.length===0?"Parâmetro não auditável: enquadramento ausente":"Parâmetro não auditável: enquadramentos sobrepostos";
   const matches=categoryParameters.filter(parameter=>parameter.dsr_rule_id===assignments[0].dsr_rule_id&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
@@ -478,7 +499,7 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Eventos variáveis com incidência de DSR</h2><p>Valores são exibidos apenas para conferência da base informativa; não representam DSR calculado.</p></div><span>{events.length} evento(s)</span></div>
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Valor do evento</th><th>Conferência da origem</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{money(eventAmount(x))}</td><td>{eventAudit(x)}<br/><small>{eventParameterAudit(x)}</small></td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Composição do evento</th><th>Conferência da origem</th><th>Parâmetro por data</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{Number(x.quantity).toLocaleString("pt-BR")} × {money(Number(x.unit_value))}<br/><b>{money(eventAmount(x))}</b><br/><small>{eventCompositionAudit(x)}</small></td><td>{eventAudit(x)}</td><td>{eventParameterAudit(x)}</td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
    </div>
    <DsrNormativeCoverage month={month}/>
    <DsrPayrollReconciliation month={month}/>
