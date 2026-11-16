@@ -72,7 +72,7 @@ export default function DsrMemoryPage(){
   const start=month+"-01";
   setOrganizationId(membership.organization_id);setCurrentUserId(user.id);setCurrentRole(membership.role||"");
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal,correctionRows]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal,correctionRows,reconciliation]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("dsr_effective_employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("dsr_effective_employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
