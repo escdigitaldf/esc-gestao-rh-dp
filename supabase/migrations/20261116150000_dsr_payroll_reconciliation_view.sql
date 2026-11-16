@@ -47,6 +47,8 @@ event_rows as (
     p.payroll_entry_statuses,
     case
       when coalesce(p.payroll_item_count, 0) > 1 then 'duplicate_posting'
+      when v.status = 'rejected' and coalesce(p.payroll_item_count, 0) > 0 then 'rejected_event_posted'
+      when v.status = 'rejected' then 'rejected_not_posted'
       when coalesce(p.payroll_item_count, 0) = 0 and v.status = 'pending' then 'awaiting_approval'
       when coalesce(p.payroll_item_count, 0) = 0 and v.status = 'approved' then 'approved_not_posted'
       when coalesce(p.payroll_item_count, 0) = 0 and v.status = 'processed' then 'processed_without_item'
@@ -64,7 +66,7 @@ event_rows as (
   left join public.payroll_entries pe
     on pe.id = v.processed_entry_id and pe.organization_id = v.organization_id
   where v.affects_dsr is true
-    and v.status in ('pending', 'approved', 'processed')
+    and v.status in ('pending', 'approved', 'processed', 'rejected')
 ),
 orphan_items as (
   select
