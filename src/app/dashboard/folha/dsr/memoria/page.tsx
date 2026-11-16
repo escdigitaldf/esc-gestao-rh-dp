@@ -197,7 +197,7 @@ export default function DsrMemoryPage(){
   const eventAudits=events.map(eventAudit);
   const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
   const pendingEvents=events.filter(x=>x.status==="pending").length;
-  const reconciliationBlockers=reconciliationRows.filter(x=>x.reconciliation_status!=="reconciled").length;
+  const reconciliationBlockers=reconciliationRows.filter(x=>!["reconciled","rejected_not_posted"].includes(x.reconciliation_status)).length;
   const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
