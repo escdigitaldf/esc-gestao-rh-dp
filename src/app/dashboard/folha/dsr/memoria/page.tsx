@@ -103,6 +103,7 @@ export default function DsrMemoryPage(){
   setFormalReviews((formal.data||[]) as unknown as FormalReview[]);
   setCorrections((correctionRows.data||[]) as unknown as HistoricalCorrection[]);
   setReconciliationRows((reconciliation.data||[]) as ReconciliationCheck[]);
+  setNormativeAssignments((normative.data||[]) as NormativeAssignment[]);
   setReconciliationQueryError(Boolean(reconciliation.error));
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
@@ -202,9 +203,17 @@ export default function DsrMemoryPage(){
   const pendingEvents=events.filter(x=>x.status==="pending").length;
   const reconciliationBlockers=reconciliationRows.filter(x=>!["reconciled","rejected_not_posted"].includes(x.reconciliation_status)).length;
   const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
+  const scheduledEmployeeIds=[...new Set(activeSchedules.map(s=>s.employee_id))];
+  const normativeCoverage=scheduledEmployeeIds.map(employeeId=>{
+   const employeeAssignments=normativeAssignments.filter(a=>a.employee_id===employeeId&&a.validity_from<=end&&(!a.validity_to||a.validity_to>=end));
+   const employeeSchedules=activeSchedules.filter(s=>s.employee_id===employeeId);
+   return employeeAssignments.length===1&&employeeSchedules.every(s=>s.dsr_rule_id===employeeAssignments[0].dsr_rule_id);
+  });
+  const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
-   {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},\n   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},
+   {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
+   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
    {label:"Conciliação dos eventos DSR com os lançamentos da folha",ok:reconciliationOk,detail:reconciliationQueryError?"Não foi possível consultar a visão de conciliação":reconciliationRows.length+" registro(s) conferido(s) · "+reconciliationBlockers+" divergência(s) ou pendência(s)"}
