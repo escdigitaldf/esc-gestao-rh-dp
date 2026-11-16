@@ -464,9 +464,13 @@ export default function DsrMemoryPage(){
       const ruleCurrent=validFrom&&validTo;
       const params=categoryParameters.filter(p=>p.dsr_rule_id===rule.id&&p.effective_from<=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)&&(!p.effective_to||p.effective_to>=month+"-01"));
       const parameterText=["overtime","commission","additional","bonus","other"].map(cat=>{
-       const p=params.filter(x=>x.category===cat&&x.status==="validated").sort((a,b)=>b.version-a.version)[0];
-       const doc=p?.source_document_id?ruleDocuments.find(d=>d.id===p.source_document_id):null;
-       return categoryLabel(cat)+": "+(p?(p.unit==="days"?"por dias":"por horas")+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR")+" · "+(p.source_document_id?(doc?doc.file_name:"PDF não localizado"):(p.source_reference||"sem referência documental")):"sem parâmetro validado");
+       const versions=params.filter(x=>x.category===cat&&x.status==="validated").sort((a,b)=>a.effective_from.localeCompare(b.effective_from)||a.version-b.version);
+       if(!versions.length)return categoryLabel(cat)+": sem parâmetro validado";
+       return categoryLabel(cat)+": "+versions.map(p=>{
+        const doc=p.source_document_id?ruleDocuments.find(d=>d.id===p.source_document_id):null;
+        const unit=p.unit==="days"?"por dias":p.unit==="hours"?"por horas":p.unit;
+        return "v"+p.version+" ("+new Date(p.effective_from+"T12:00:00").toLocaleDateString("pt-BR")+" a "+(p.effective_to?new Date(p.effective_to+"T12:00:00").toLocaleDateString("pt-BR"):"sem fim")+") · "+unit+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR")+" · "+(p.source_document_id?(doc?doc.file_name:"PDF não localizado"):(p.source_reference||"sem referência documental"));
+       }).join(" | ");
       });
       return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{!rule.validity_from?"Vigência inicial não informada":ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="suspended"?"Suspensa":rule.status!=="validated"?"Pendente de validação":!rule.validity_from?"Validade incompleta":ruleCurrent?"Validada e vigente":"Validada, fora da vigência"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td><td>{ruleDocuments.filter(doc=>doc.dsr_rule_id===rule.id).map(doc=><div key={doc.id}><small>{doc.file_name} · v{doc.document_version} · {new Date(doc.uploaded_at).toLocaleDateString("pt-BR")}</small></div>)}{!ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id)&&<small>{rule.document_reference||rule.source_identifier||"Fonte não documentada"}</small>}</td></tr>;
     })}</tbody></table></div>}
