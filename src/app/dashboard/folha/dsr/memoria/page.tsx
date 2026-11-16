@@ -252,7 +252,9 @@ export default function DsrMemoryPage(){
   const activeSchedules=schedules.filter(s=>activeEmployeeIds.has(s.employee_id)&&s.effective_from<=end&&(!s.effective_to||s.effective_to>=start));
   const rulesOk=activeSchedules.length>0&&activeSchedules.every(s=>{const rule=dsrRules.find(r=>r.id===s.dsr_rule_id);return s.dsr_rule_status==="validated"&&Boolean(rule&&rule.status==="validated");});
   const eventAudits=events.map(eventAudit);
-  const eventOriginsOk=eventAudits.every(x=>x==="Rubrica e parâmetro normativo conferidos");
+  const eventOriginsOk=eventAudits.every(x=>x.startsWith("Rubrica e parâmetro normativo conferidos"));
+  const parameterAudits=events.map(eventParameterAudit);
+  const eventParametersOk=parameterAudits.every(x=>x.startsWith("Parâmetro normativo conferido"));
   const pendingEvents=events.filter(x=>x.status==="pending").length;
   const reconciliationBlockers=reconciliationRows.filter(x=>!["reconciled","rejected_not_posted"].includes(x.reconciliation_status)).length;
   const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
@@ -277,7 +279,8 @@ export default function DsrMemoryPage(){
    {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+(temporalNormativeAudit.length===0?"cobertura diária compatível":temporalNormativeAudit.length+" divergência(s) temporal(is)")},
    {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+normativeTransitions+" colaborador(es) com mudança de enquadramento segmentada · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
    {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
-   {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
+   {label:"Origem das rubricas e enquadramento normativo dos eventos",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
+   {label:"Vigência, unicidade e integridade dos parâmetros por data do evento",ok:eventParametersOk,detail:parameterAudits.filter(x=>x.startsWith("Parâmetro normativo conferido")).length+" de "+events.length+" evento(s) com parâmetro único e válido · "+parameterAudits.filter(x=>!x.startsWith("Parâmetro normativo conferido")).slice(0,3).join(" | ")},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
    {label:"Conciliação dos eventos DSR com os lançamentos da folha",ok:reconciliationOk,detail:reconciliationQueryError?"Não foi possível consultar a visão de conciliação":reconciliationRows.length+" registro(s) conferido(s) · "+reconciliationBlockers+" divergência(s) ou pendência(s)"}
   ];
@@ -296,8 +299,22 @@ export default function DsrMemoryPage(){
   const assignments=normativeAssignments.filter(a=>a.employee_id===event.employee_id&&a.validity_from<=eventDate&&(!a.validity_to||a.validity_to>=eventDate));
   if(assignments.length!==1)return assignments.length===0?"Evento sem enquadramento normativo na data":"Evento com enquadramentos sobrepostos na data";
   if(!applicableRuleIds.includes(assignments[0].dsr_rule_id))return "Regra da escala diverge do enquadramento na data do evento";
-  const hasParameter=categoryParameters.some(parameter=>parameter.dsr_rule_id===assignments[0].dsr_rule_id&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
-  return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
+  const parameterStatus=eventParameterAudit(event);
+  return parameterStatus.startsWith("Parâmetro normativo conferido")
+   ?"Rubrica e parâmetro normativo conferidos · "+parameterStatus
+   :parameterStatus;
+ }
+ function eventParameterAudit(event:VariableEvent){
+  const eventDate=event.event_date||month+"-01";
+  const assignments=normativeAssignments.filter(a=>a.employee_id===event.employee_id&&a.validity_from<=eventDate&&(!a.validity_to||a.validity_to>=eventDate));
+  if(assignments.length!==1)return assignments.length===0?"Parâmetro não auditável: enquadramento ausente":"Parâmetro não auditável: enquadramentos sobrepostos";
+  const matches=categoryParameters.filter(parameter=>parameter.dsr_rule_id===assignments[0].dsr_rule_id&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
+  if(matches.length===0)return "Sem parâmetro normativo validado para a categoria na data";
+  if(matches.length>1)return "Parâmetros normativos sobrepostos na data ("+matches.length+")";
+  const parameter=matches[0];
+  if(!parameter.unit||!Number.isFinite(Number(parameter.denominator))||Number(parameter.denominator)<=0||!Number.isFinite(Number(parameter.rest_units))||Number(parameter.rest_units)<0)return "Parâmetro normativo com unidade ou divisor inválido";
+  const unit=parameter.unit==="days"?"dias":parameter.unit==="hours"?"horas":parameter.unit;
+  return "Parâmetro normativo conferido · v"+parameter.version+" · "+unit+" · divisor "+Number(parameter.denominator).toLocaleString("pt-BR")+" · repousos "+Number(parameter.rest_units).toLocaleString("pt-BR");
  }
  const registerReview=async()=>{
   if(!canReview){setError("Seu perfil não possui permissão para submeter a conferência do DSR.");return;}
@@ -457,7 +474,7 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Eventos variáveis com incidência de DSR</h2><p>Valores são exibidos apenas para conferência da base informativa; não representam DSR calculado.</p></div><span>{events.length} evento(s)</span></div>
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Valor do evento</th><th>Conferência da origem</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{money(eventAmount(x))}</td><td>{eventAudit(x)}</td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Valor do evento</th><th>Conferência da origem</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{money(eventAmount(x))}</td><td>{eventAudit(x)}<br/><small>{eventParameterAudit(x)}</small></td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
    </div>
    <DsrNormativeCoverage month={month}/>
    <DsrPayrollReconciliation month={month}/>
