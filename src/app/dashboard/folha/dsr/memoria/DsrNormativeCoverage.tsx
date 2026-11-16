@@ -35,7 +35,7 @@ export default function DsrNormativeCoverage({month}:Props){
  const employeeMap=useMemo(()=>new Map(employees.map(x=>[x.id,x])),[employees]);
  const ruleMap=useMemo(()=>new Map(rules.map(x=>[x.id,x])),[rules]);
  const coverage=useMemo(()=>employees.map(e=>{
-  const matches=rows.filter(a=>a.employee_id===e.id&&a.status==="validated"&&a.validity_from<=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)&&(!a.validity_to||a.validity_to>=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)));
+  const matches=rows.filter(a=>a.employee_id===e.id&&a.status==="validated"&&a.validity_from<=month+"-01"&&(!a.validity_to||a.validity_to>=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)));
   return {employee:e,assignment:matches.sort((a,b)=>b.validity_from.localeCompare(a.validity_from))[0]||null,count:matches.length};
  }),[employees,rows,month]);
  const submit=async()=>{
