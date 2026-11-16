@@ -6,7 +6,7 @@ as
 with headers as (
   select null::uuid as organization_id,'legal'::text as table_scope,t.id as table_id,t.tax_code as table_code,t.description as table_title,'progressive'::text as calculation_method,t.effective_from,t.effective_to,t.metadata->>'source' as source_reference,t.metadata->>'source_url' as source_url,'registered'::text as table_status,t.metadata,case when t.tax_code in ('FGTS_GENERAL','FGTS_APPRENTICE') then 'scalar' else 'bracketed' end as parameter_shape from public.payroll_tax_tables t
   union all
-  select p.organization_id,'organization'::text,p.id,p.table_code,p.title,p.calculation_method,p.effective_from,p.effective_to,p.source_reference,p.source_url,p.status,jsonb_build_object('notes',p.notes),case when p.calculation_method in ('fixed_rate','fixed_amount') then 'single' else 'bracketed' end from public.payroll_parameter_tables p
+  select p.organization_id,'organization'::text,p.id,p.table_code,p.title,p.calculation_method,p.effective_from,p.effective_to,p.source_reference,p.source_url,p.status,jsonb_build_object('notes',p.notes),case when p.calculation_method='manual' then 'manual' when p.calculation_method in ('fixed_rate','fixed_amount') then 'single' else 'bracketed' end from public.payroll_parameter_tables p
 ),
 brackets as (
   select 'legal'::text as table_scope,null::uuid as organization_id,b.tax_table_id as table_id,b.bracket_order,b.lower_limit,b.upper_limit,b.rate,b.deduction as deduction_amount,0::numeric as fixed_amount,true as rate_is_fraction from public.payroll_tax_brackets b
