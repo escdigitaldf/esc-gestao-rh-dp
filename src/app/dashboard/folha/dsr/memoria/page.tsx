@@ -88,7 +88,7 @@ export default function DsrMemoryPage(){
    s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false}),
    s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).order("requested_at",{ascending:false}).limit(100),
    s.from("dsr_payroll_reconciliation").select("reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",start),
-   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",end).or("validity_to.is.null,validity_to.gte."+end)
+   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",start).or("validity_to.is.null,validity_to.gte."+end)
   ]);
   const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error||reconciliation.error||normative.error;
   if(issue)setError(issue.message);
@@ -206,7 +206,7 @@ export default function DsrMemoryPage(){
   const reconciliationOk=!reconciliationQueryError&&reconciliationBlockers===0;
   const scheduledEmployeeIds=[...new Set(activeSchedules.map(s=>s.employee_id))];
   const normativeCoverage=scheduledEmployeeIds.map(employeeId=>{
-   const employeeAssignments=normativeAssignments.filter(a=>a.employee_id===employeeId&&a.validity_from<=end&&(!a.validity_to||a.validity_to>=end));
+   const employeeAssignments=normativeAssignments.filter(a=>a.employee_id===employeeId&&a.validity_from<=start&&(!a.validity_to||a.validity_to>=end));
    const employeeSchedules=activeSchedules.filter(s=>s.employee_id===employeeId);
    return employeeAssignments.length===1&&employeeSchedules.every(s=>s.dsr_rule_id===employeeAssignments[0].dsr_rule_id);
   });
