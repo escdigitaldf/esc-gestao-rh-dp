@@ -15,7 +15,7 @@ type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
 type ReviewDecision={id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string};
-type FormalReview={id:string;competence_month:string;revision:number;status:string;submitted_by:string;submitted_at:string;first_approved_by:string|null;first_approved_at:string|null;second_approved_by:string|null;second_approved_at:string|null;approved_at:string|null;blocker_count:number;submission_note:string;financial_calculation_released:boolean;dsr_competence_review_decisions:ReviewDecision[]};
+type FormalReview={id:string;competence_month:string;revision:number;status:string;submitted_by:string;submitted_at:string;first_approved_by:string|null;first_approved_at:string|null;second_approved_by:string|null;second_approved_at:string|null;approved_at:string|null;blocker_count:number;submission_note:string;checklist_snapshot:{label:string;ok:boolean;detail?:string}[];financial_calculation_released:boolean;dsr_competence_review_decisions:ReviewDecision[]};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
