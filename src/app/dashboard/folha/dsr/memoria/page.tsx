@@ -16,6 +16,7 @@ type DsrRule={id:string;rule_name:string;professional_category:string|null;union
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_reference:string|null;version:number};
 type ReconciliationCheck={reconciliation_status:string};
 type NormativeAssignment={id:string;employee_id:string;dsr_rule_id:string;professional_category:string;collective_instrument:string;work_regime:string;validity_from:string;validity_to:string|null;status:string};
+type DsrRuleDocument={id:string;dsr_rule_id:string;file_name:string;document_version:number;uploaded_at:string;notes:string|null};
 type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];events:VariableEvent[];scheduled:number;worked:number;draft:number;validated:number;rejected:number};
 type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
 type ReviewDecision={id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string};
@@ -48,7 +49,7 @@ export default function DsrMemoryPage(){
  const [reviewHistory,setReviewHistory]=useState<ReviewLog[]>([]);
  const [formalReviews,setFormalReviews]=useState<FormalReview[]>([]);
  const [reconciliationRows,setReconciliationRows]=useState<ReconciliationCheck[]>([]);
- const [normativeAssignments,setNormativeAssignments]=useState<NormativeAssignment[]>([]);
+ const [normativeAssignments,setNormativeAssignments]=useState<NormativeAssignment[]>([]);\n const [ruleDocuments,setRuleDocuments]=useState<DsrRuleDocument[]>([]);
  const [reconciliationQueryError,setReconciliationQueryError]=useState(false);
  const [reviewNote,setReviewNote]=useState("");
  const [decisionNote,setDecisionNote]=useState("");
@@ -75,7 +76,7 @@ export default function DsrMemoryPage(){
   const start=month+"-01";
   setOrganizationId(membership.organization_id);setCurrentUserId(user.id);setCurrentRole(membership.role||"");
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal,correctionRows,reconciliation,normative]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal,correctionRows,reconciliation,normative,documents]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
    s.from("dsr_effective_employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
    s.from("dsr_effective_employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
@@ -88,9 +89,10 @@ export default function DsrMemoryPage(){
    s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false}),
    s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).order("requested_at",{ascending:false}).limit(100),
    s.from("dsr_payroll_reconciliation").select("reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",start),
-   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",start).or("validity_to.is.null,validity_to.gte."+end)
+   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",start).or("validity_to.is.null,validity_to.gte."+end),
+   s.from("organization_dsr_rule_documents").select("id,dsr_rule_id,file_name,document_version,uploaded_at,notes").eq("organization_id",membership.organization_id).order("uploaded_at",{ascending:false})
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error||reconciliation.error||normative.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error||reconciliation.error||normative.error||documents.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -104,7 +106,7 @@ export default function DsrMemoryPage(){
   setFormalReviews((formal.data||[]) as unknown as FormalReview[]);
   setCorrections((correctionRows.data||[]) as unknown as HistoricalCorrection[]);
   setReconciliationRows((reconciliation.data||[]) as ReconciliationCheck[]);
-  setNormativeAssignments((normative.data||[]) as NormativeAssignment[]);
+  setNormativeAssignments((normative.data||[]) as NormativeAssignment[]);\n  setRuleDocuments((documents.data||[]) as DsrRuleDocument[]);
   setReconciliationQueryError(Boolean(reconciliation.error));
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
@@ -210,17 +212,17 @@ export default function DsrMemoryPage(){
    const employeeSchedules=activeSchedules.filter(s=>s.employee_id===employeeId);
    return employeeAssignments.length===1&&employeeSchedules.every(s=>s.dsr_rule_id===employeeAssignments[0].dsr_rule_id);
   });
-  const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);
+  const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);\n  const rulesInScope=dsrRules.filter(rule=>activeSchedules.some(schedule=>schedule.dsr_rule_id===rule.id));\n  const sourceDocsOk=rulesInScope.every(rule=>!["cct","act"].includes(rule.source_type)||ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id));\n  const parameterSourcesOk=categoryParameters.filter(parameter=>parameter.status==="validated"&&rulesInScope.some(rule=>rule.id===parameter.dsr_rule_id)&&parameter.effective_from<=end&&(!parameter.effective_to||parameter.effective_to>=start)).every(parameter=>{const rule=dsrRules.find(item=>item.id===parameter.dsr_rule_id);return rule&&(["cct","act"].includes(rule.source_type)?Boolean(parameter.source_document_id&&ruleDocuments.some(doc=>doc.id===parameter.source_document_id&&doc.dsr_rule_id===rule.id)):Boolean(parameter.source_reference?.trim());});
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
-   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},
+   {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},\n   {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
    {label:"Conciliação dos eventos DSR com os lançamentos da folha",ok:reconciliationOk,detail:reconciliationQueryError?"Não foi possível consultar a visão de conciliação":reconciliationRows.length+" registro(s) conferido(s) · "+reconciliationBlockers+" divergência(s) ou pendência(s)"}
   ];
   return {checks,blockers:checks.filter(x=>!x.ok).length};
- },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError,normativeAssignments]);
+ },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError,normativeAssignments,ruleDocuments]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  function eventAudit(event:VariableEvent){
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
