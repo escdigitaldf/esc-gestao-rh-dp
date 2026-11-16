@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {ArrowLeft,BookOpen,CalendarDays,Clock,Plus,ShieldAlert,ClipboardList,CheckCircle2} from "lucide-react";
+import {ArrowLeft,BookOpen,CalendarDays,Clock,Plus,ShieldAlert,ClipboardList,CheckCircle2,Calculator} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 type Employee={id:string;employee_code:string;full_name:string};
 type Schedule={id:string;employee_id:string;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;work_days:number[];weekly_rest_days:number[];weekly_hours:number|null;cycle_days:number|null;cycle_pattern:string[];dsr_rule_id:string|null;dsr_rule_status:string;dsr_rule_notes:string|null;dsr_rule_validated_by:string|null;dsr_rule_validated_at:string|null};
@@ -47,6 +47,7 @@ export default function DsrSettingsPage(){
  if(loading)return <div className="loading-screen">Carregando parâmetros de DSR...</div>;
  return <main className="module-shell"><header className="module-top"><a href="/dashboard/folha"><ArrowLeft size={16}/> Folha de pagamento</a><b><span className="brand-mark">ESC</span> Gestão de RH e DP</b><span>Jornadas e DSR</span></header><section className="module-content payroll-content"><div className="module-heading"><div><div className="form-kicker">DEPARTAMENTO PESSOAL · PARÂMETROS</div><h1>Jornadas, feriados e DSR</h1><p>Cadastre a escala individual e o calendário aplicável a cada organização.</p></div><div className="salary-history-icon"><CalendarDays size={24}/></div></div>
  {error&&<div className="notice error">{error}</div>}{success&&<div className="notice success">{success}</div>}
+ <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Auditoria das bases da folha</h2><p>Concilie proventos, descontos, incidências de INSS, IRRF e FGTS e totais por colaborador.</p></div><a className="employee-primary" href="/dashboard/folha/auditoria-bases"><Calculator size={15}/> Abrir auditoria da folha</a></div></div>
  <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Memória preliminar do DSR</h2><p>Consolide ocorrências validadas e eventos variáveis por colaborador, sem gerar valores na folha.</p></div><a className="employee-primary" href="/dashboard/folha/dsr/memoria"><ClipboardList size={15}/> Abrir memória preliminar</a></div></div>
  <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Regras legais e coletivas</h2><p>Cadastre CCT, ACT e referências normativas por categoria. O cadastro não libera cálculo automaticamente.</p></div><a className="employee-primary" href="/dashboard/folha/dsr/regras"><BookOpen size={15}/> Gerenciar regras do DSR</a></div></div>
  <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Controle diário de jornada</h2><p>Apontamentos por data para cada colaborador, com validação e histórico.</p></div><a className="employee-primary" href="/dashboard/folha/dsr/ocorrencias"><CalendarDays size={15}/> Abrir controle diário</a></div></div>
