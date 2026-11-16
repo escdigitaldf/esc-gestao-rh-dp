@@ -90,7 +90,7 @@ export default function DsrMemoryPage(){
    s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false}),
    s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).order("requested_at",{ascending:false}).limit(100),
    s.from("dsr_payroll_reconciliation").select("reconciliation_status").eq("organization_id",membership.organization_id).eq("competence_month",start),
-   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",start).or("validity_to.is.null,validity_to.gte."+end),
+   s.from("employee_dsr_normative_assignments").select("id,employee_id,dsr_rule_id,professional_category,collective_instrument,work_regime,validity_from,validity_to,status").eq("organization_id",membership.organization_id).eq("status","validated").lte("validity_from",end).or("validity_to.is.null,validity_to.gte."+start),
    s.from("organization_dsr_rule_documents").select("id,dsr_rule_id,file_name,document_version,uploaded_at,notes").eq("organization_id",membership.organization_id).order("uploaded_at",{ascending:false})
   ]);
   const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error||reconciliation.error||normative.error||documents.error;
@@ -196,6 +196,45 @@ export default function DsrMemoryPage(){
   }
   return results.sort((a,b)=>a.date.localeCompare(b.date)||a.employee.localeCompare(b.employee));
  },[month,employees,schedules,occurrences,holidays]);
+ const temporalNormativeAudit=useMemo(()=>{
+  const start=month+"-01";
+  const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  const today=new Date().toISOString().slice(0,10);
+  const findings:{date:string;employee:string;issue:string;detail:string}[]=[];
+  for(const employee of employees.filter(x=>x.employment_status==="active")){
+   for(let day=1;day<=Number(end.slice(8,10));day++){
+    const date=month+"-"+String(day).padStart(2,"0");
+    if(date>today)continue;
+    const daySchedules=schedules.filter(s=>s.employee_id===employee.id&&s.effective_from<=date&&(!s.effective_to||s.effective_to>=date));
+    if(daySchedules.length!==1)continue;
+    const schedule=daySchedules[0];
+    const assignments=normativeAssignments.filter(a=>a.employee_id===employee.id&&a.validity_from<=date&&(!a.validity_to||a.validity_to>=date));
+    if(assignments.length===0){
+     findings.push({date,employee:employee.full_name,issue:"Lacuna de enquadramento",detail:"Não existe enquadramento normativo validado nesta data, embora haja escala vigente."});
+     continue;
+    }
+    if(assignments.length>1){
+     findings.push({date,employee:employee.full_name,issue:"Sobreposição de enquadramentos",detail:assignments.length+" enquadramentos validados cobrem a mesma data."});
+     continue;
+    }
+    const assignment=assignments[0];
+    if(!schedule.dsr_rule_id||assignment.dsr_rule_id!==schedule.dsr_rule_id){
+     findings.push({date,employee:employee.full_name,issue:"Regra da escala divergente",detail:"A regra vinculada à escala não corresponde ao enquadramento profissional vigente."});
+     continue;
+    }
+    const rule=dsrRules.find(r=>r.id===assignment.dsr_rule_id);
+    if(!rule||rule.status!=="validated"||(rule.validity_from&&rule.validity_from>date)||(rule.validity_to&&rule.validity_to<date)){
+     findings.push({date,employee:employee.full_name,issue:"Regra fora da vigência",detail:"A regra normativa do enquadramento não está validada ou não cobre esta data."});
+     continue;
+    }
+    const normalize=(value:string)=>value.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").trim().toLocaleLowerCase("pt-BR").replace(/\\s+/g," ");
+    if(rule.professional_category&&normalize(rule.professional_category)!==normalize(assignment.professional_category)){
+     findings.push({date,employee:employee.full_name,issue:"Categoria profissional divergente",detail:"A categoria do enquadramento difere da categoria cadastrada na regra normativa."});
+    }
+   }
+  }
+  return findings;
+ },[month,employees,schedules,normativeAssignments,dsrRules]);
  const auditCounts=useMemo(()=>({holidays:competenceAudit.filter(x=>x.issue==="Feriado sem classificação").length,missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
  const canReview=["owner","admin","hr_manager","payroll"].includes(currentRole);
  const reviewChecks=useMemo(()=>{
@@ -232,13 +271,14 @@ export default function DsrMemoryPage(){
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
    {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+normativeCoverage.filter(Boolean).length+" com enquadramento único e compatível"},
+   {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
    {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
    {label:"Conciliação dos eventos DSR com os lançamentos da folha",ok:reconciliationOk,detail:reconciliationQueryError?"Não foi possível consultar a visão de conciliação":reconciliationRows.length+" registro(s) conferido(s) · "+reconciliationBlockers+" divergência(s) ou pendência(s)"}
   ];
   return {checks,blockers:checks.filter(x=>!x.ok).length};
- },[month,employees,schedules,dsrRules,events,competenceAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError,normativeAssignments,ruleDocuments]);
+ },[month,employees,schedules,dsrRules,events,competenceAudit,temporalNormativeAudit,rubrics,categoryParameters,reconciliationRows,reconciliationQueryError,normativeAssignments,ruleDocuments]);
  const categoryLabel=(v:string)=>dsrCategoryName(v);
  function eventAudit(event:VariableEvent){
   const rubric=rubrics.find(item=>item.id===event.rubric_id);
@@ -249,7 +289,10 @@ export default function DsrMemoryPage(){
   const validatedRuleIds=dsrRules.filter(rule=>rule.status==="validated"&&rule.validity_from&&rule.validity_from<=eventDate&&(!rule.validity_to||rule.validity_to>=eventDate)).map(rule=>rule.id);
   const applicableRuleIds=linkedSchedules.map(schedule=>schedule.dsr_rule_id).filter((id):id is string=>id!==null&&validatedRuleIds.includes(id));
   if(!applicableRuleIds.length)return "Sem escala e regra normativa validadas na data do evento";
-  const hasParameter=categoryParameters.some(parameter=>applicableRuleIds.includes(parameter.dsr_rule_id)&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
+  const assignments=normativeAssignments.filter(a=>a.employee_id===event.employee_id&&a.validity_from<=eventDate&&(!a.validity_to||a.validity_to>=eventDate));
+  if(assignments.length!==1)return assignments.length===0?"Evento sem enquadramento normativo na data":"Evento com enquadramentos sobrepostos na data";
+  if(!applicableRuleIds.includes(assignments[0].dsr_rule_id))return "Regra da escala diverge do enquadramento na data do evento";
+  const hasParameter=categoryParameters.some(parameter=>parameter.dsr_rule_id===assignments[0].dsr_rule_id&&parameter.category===event.dsr_category&&parameter.status==="validated"&&parameter.effective_from<=eventDate&&(!parameter.effective_to||parameter.effective_to>=eventDate));
   return hasParameter?"Rubrica e parâmetro normativo conferidos":"Sem parâmetro normativo validado para a categoria";
  }
  const registerReview=async()=>{
