@@ -216,15 +216,16 @@ export default function DsrMemoryPage(){
   });
   const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);
   const rulesInScope=dsrRules.filter(rule=>activeSchedules.some(schedule=>schedule.dsr_rule_id===rule.id));
-  const sourceDocsOk=rulesInScope.every(rule=>["cct","act"].includes(rule.source_type)?ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id):Boolean(rule.document_reference?.trim()||rule.source_identifier?.trim()));
+  const sourceDocsOk=rulesInScope.every(rule=>ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id)||(["law","internal_policy"].includes(rule.source_type)&&Boolean(rule.document_reference?.trim()&&rule.rule_summary?.trim())));
   const parameterSourcesOk=categoryParameters
    .filter(parameter=>parameter.status==="validated"&&rulesInScope.some(rule=>rule.id===parameter.dsr_rule_id)&&parameter.effective_from<=end&&(!parameter.effective_to||parameter.effective_to>=start))
    .every(parameter=>{
     const rule=dsrRules.find(item=>item.id===parameter.dsr_rule_id);
     if(!rule)return false;
-    if(["cct","act"].includes(rule.source_type)){
-     return Boolean(parameter.source_document_id&&ruleDocuments.some(doc=>doc.id===parameter.source_document_id&&doc.dsr_rule_id===rule.id));
+    if(parameter.source_document_id){
+     return ruleDocuments.some(doc=>doc.id===parameter.source_document_id&&doc.dsr_rule_id===rule.id);
     }
+    if(["cct","act"].includes(rule.source_type))return false;
     return Boolean(parameter.source_reference?.trim());
    });
   const checks=[
