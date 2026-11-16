@@ -4,6 +4,7 @@ import {useRouter} from "next/navigation";
 import {ArrowLeft,CalendarDays,Clock,ShieldAlert,ClipboardList,RefreshCw} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 import DsrPayrollReconciliation from "./DsrPayrollReconciliation";
+import DsrNormativeCoverage from "./DsrNormativeCoverage";
 
 type Employee={id:string;employee_code:string;full_name:string;employment_status:string};
 type Schedule={id:string;employee_id:string;dsr_rule_id:string|null;schedule_name:string;schedule_type:string;effective_from:string;effective_to:string|null;dsr_rule_status:string;weekly_hours:number|null;cycle_days:number|null;work_days:number[];weekly_rest_days:number[];cycle_pattern:string[]};
@@ -380,6 +381,7 @@ export default function DsrMemoryPage(){
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Valor do evento</th><th>Conferência da origem</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{money(eventAmount(x))}</td><td>{eventAudit(x)}</td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
    </div>
+   <DsrNormativeCoverage month={month}/>
    <DsrPayrollReconciliation month={month}/>
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Retificação histórica de registros validados</h2><p>Correções ficam em camada auditável, sem sobrescrever o apontamento original. A memória efetiva incorpora a proposta somente após duas aprovações independentes.</p></div><span>{corrections.length} solicitação(ões)</span></div>
