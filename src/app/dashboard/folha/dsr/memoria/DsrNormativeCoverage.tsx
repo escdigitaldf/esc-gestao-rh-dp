@@ -6,7 +6,6 @@ type Employee={id:string;employee_code:string;full_name:string;work_regime:strin
 type Rule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;status:string;validity_from:string|null;validity_to:string|null};
 type Assignment={id:string;employee_id:string;dsr_rule_id:string;professional_category:string;collective_instrument:string;work_regime:string;validity_from:string;validity_to:string|null;source_reference:string;justification:string;status:string;created_by:string;validated_by:string|null;validated_at:string|null;validation_note:string|null};
 type Props={month:string};
-const today=()=>new Date().toISOString().slice(0,10);
 export default function DsrNormativeCoverage({month}:Props){
  const [org,setOrg]=useState("");const [user,setUser]=useState("");const [role,setRole]=useState("");
  const [employees,setEmployees]=useState<Employee[]>([]);const [rules,setRules]=useState<Rule[]>([]);const [rows,setRows]=useState<Assignment[]>([]);
