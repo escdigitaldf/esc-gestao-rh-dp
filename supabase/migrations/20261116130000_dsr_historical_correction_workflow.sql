@@ -58,6 +58,20 @@ create or replace function public.guard_dsr_historical_correction_audit()
 returns trigger language plpgsql set search_path=''
 as $function$
 begin
+  if tg_table_name='dsr_historical_correction_requests'
+     and tg_op='UPDATE'
+     and current_setting('app.dsr_correction_decision',true)=old.id::text
+     and new.organization_id is not distinct from old.organization_id
+     and new.target_type is not distinct from old.target_type
+     and new.target_id is not distinct from old.target_id
+     and new.competence_month is not distinct from old.competence_month
+     and new.requested_by is not distinct from old.requested_by
+     and new.requested_at is not distinct from old.requested_at
+     and new.reason is not distinct from old.reason
+     and new.original_snapshot is not distinct from old.original_snapshot
+     and new.proposed_snapshot is not distinct from old.proposed_snapshot then
+    return new;
+  end if;
   raise exception 'O histórico de retificações e decisões é imutável.';
 end;
 $function$;
@@ -201,6 +215,8 @@ begin
     raise exception 'Perfil sem permissão para decidir a retificação.';
   end if;
   if v_request.requested_by=v_user then raise exception 'O solicitante não pode aprovar a própria retificação.'; end if;
+
+  perform set_config('app.dsr_correction_decision',v_request.id::text,true);
 
   if v_request.status='awaiting_first_approval' then
     if p_decision='reject' then
