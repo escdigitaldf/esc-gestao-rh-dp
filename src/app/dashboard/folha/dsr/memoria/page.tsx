@@ -223,7 +223,7 @@ export default function DsrMemoryPage(){
      continue;
     }
     const rule=dsrRules.find(r=>r.id===assignment.dsr_rule_id);
-    if(!rule||rule.status!=="validated"||(rule.validity_from&&rule.validity_from>date)||(rule.validity_to&&rule.validity_to<date)){
+    if(!rule||rule.status!=="validated"||!rule.validity_from||rule.validity_from>date||(rule.validity_to&&rule.validity_to<date)){
      findings.push({date,employee:employee.full_name,issue:"Regra fora da vigência",detail:"A regra normativa do enquadramento não está validada ou não cobre esta data."});
      continue;
     }
@@ -235,6 +235,15 @@ export default function DsrMemoryPage(){
   }
   return findings;
  },[month,employees,schedules,normativeAssignments,dsrRules]);
+ const normativeTransitions=useMemo(()=>{
+  const start=month+"-01";
+  const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
+  return employees.filter(employee=>{
+   const versions=normativeAssignments.filter(a=>a.employee_id===employee.id&&a.validity_from<=end&&(!a.validity_to||a.validity_to>=start));
+   const signatures=new Set(versions.map(a=>[a.professional_category,a.collective_instrument,a.work_regime,a.dsr_rule_id].join("|")));
+   return signatures.size>1;
+  }).length;
+ },[month,employees,normativeAssignments]);
  const auditCounts=useMemo(()=>({holidays:competenceAudit.filter(x=>x.issue==="Feriado sem classificação").length,missing:competenceAudit.filter(x=>x.issue==="Dia previsto sem apontamento").length,unresolved:competenceAudit.filter(x=>["Ocorrência em rascunho","Ocorrência rejeitada"].includes(x.issue)).length,conflicts:competenceAudit.filter(x=>["Escalas sobrepostas","Divergência de jornada","Trabalho em repouso previsto","Ocorrência sem escala vigente"].includes(x.issue)).length,unvalidated:competenceAudit.filter(x=>x.issue==="Escala/regra pendente").length,unclassified:competenceAudit.filter(x=>x.issue==="Dia sem classificação").length}),[competenceAudit]);
  const canReview=["owner","admin","hr_manager","payroll"].includes(currentRole);
  const reviewChecks=useMemo(()=>{
@@ -266,7 +275,7 @@ export default function DsrMemoryPage(){
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
    {label:"Escalas e regras normativas válidas na competência",ok:rulesOk,detail:activeSchedules.length+" escala(s) no período"},
    {label:"Enquadramento individual por categoria, instrumento coletivo e regime",ok:normativeCoverageOk,detail:scheduledEmployeeIds.length+" colaborador(es) com escala · "+(temporalNormativeAudit.length===0?"cobertura diária compatível":temporalNormativeAudit.length+" divergência(s) temporal(is)")},
-   {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
+   {label:"Consistência temporal do enquadramento, regra e escala",ok:temporalNormativeAudit.length===0,detail:temporalNormativeAudit.length+" divergência(s) temporal(is) · "+normativeTransitions+" colaborador(es) com mudança de enquadramento segmentada · "+temporalNormativeAudit.slice(0,3).map(x=>x.date+" "+x.employee+": "+x.issue).join(" | ")},
    {label:"Fontes documentais das regras e parâmetros",ok:sourceDocsOk&&parameterSourcesOk,detail:rulesInScope.length+" regra(s) em uso · "+ruleDocuments.filter(doc=>rulesInScope.some(rule=>rule.id===doc.dsr_rule_id)).length+" PDF(s) anexado(s); parâmetros com fonte conferida: "+(sourceDocsOk&&parameterSourcesOk?"sim":"não")},
    {label:"Origem das rubricas e parâmetros DSR",ok:eventOriginsOk,detail:events.length+" evento(s) conferido(s)"},
    {label:"Aprovação dos eventos variáveis",ok:pendingEvents===0,detail:pendingEvents+" evento(s) aguardando aprovação"},
