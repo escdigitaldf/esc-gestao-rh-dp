@@ -12,7 +12,7 @@ type Holiday={id:string;holiday_date:string;name:string;holiday_scope:string;sta
 type Occurrence={id:string;employee_id:string;work_schedule_id:string;occurrence_date:string;occurrence_type:string;scheduled_hours:number;worked_hours:number;record_status:string};
 type VariableEvent={id:string;employee_id:string;rubric_id:string|null;code:string;description:string;item_type:string;amount:number|null;quantity:number;unit_value:number;status:string;event_date:string|null;dsr_category:string};
 type Rubric={id:string;code:string;description:string;item_type:string;affects_dsr:boolean;dsr_category:string;active:boolean};
-type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
+type DsrRule={id:string;rule_name:string;professional_category:string|null;union_name:string|null;source_type:string;source_identifier:string|null;document_reference:string|null;rule_summary:string|null;validity_from:string|null;validity_to:string|null;status:string;calculation_method:string|null};
 type CategoryParameter={id:string;dsr_rule_id:string;category:string;unit:string;denominator:number;rest_units:number;effective_from:string;effective_to:string|null;status:string;justification:string;source_document_id:string|null;source_reference:string|null;version:number};
 type ReconciliationCheck={reconciliation_status:string};
 type NormativeAssignment={id:string;employee_id:string;dsr_rule_id:string;professional_category:string;collective_instrument:string;work_regime:string;validity_from:string;validity_to:string|null;status:string};
@@ -83,7 +83,7 @@ export default function DsrMemoryPage(){
    s.from("dsr_effective_employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
-   s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
+   s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,source_identifier,document_reference,rule_summary,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
    s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_document_id,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
    s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end),
    s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20),
@@ -216,7 +216,7 @@ export default function DsrMemoryPage(){
   });
   const normativeCoverageOk=scheduledEmployeeIds.length>0&&normativeCoverage.every(Boolean);
   const rulesInScope=dsrRules.filter(rule=>activeSchedules.some(schedule=>schedule.dsr_rule_id===rule.id));
-  const sourceDocsOk=rulesInScope.every(rule=>!["cct","act"].includes(rule.source_type)||ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id));
+  const sourceDocsOk=rulesInScope.every(rule=>["cct","act"].includes(rule.source_type)?ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id):Boolean(rule.document_reference?.trim()||rule.source_identifier?.trim()));
   const parameterSourcesOk=categoryParameters.filter(parameter=>parameter.status==="validated"&&rulesInScope.some(rule=>rule.id===parameter.dsr_rule_id)&&parameter.effective_from<=end&&(!parameter.effective_to||parameter.effective_to>=start)).every(parameter=>{const rule=dsrRules.find(item=>item.id===parameter.dsr_rule_id);return rule&&(["cct","act"].includes(rule.source_type)?Boolean(parameter.source_document_id&&ruleDocuments.some(doc=>doc.id===parameter.source_document_id&&doc.dsr_rule_id===rule.id)):Boolean(parameter.source_reference?.trim());});
   const checks=[
    {label:"Cobertura diária, feriados e consistência dos apontamentos",ok:competenceAudit.length===0,detail:competenceAudit.length+" pendência(s) identificada(s)"},
@@ -382,7 +382,7 @@ export default function DsrMemoryPage(){
    <div className="employee-list-card payroll-list">
     <div className="employee-list-head"><div><h2>Regras normativas vinculadas às escalas</h2><p>Exibe a situação da regra e dos parâmetros por categoria, sem presumir direito ou fórmula universal.</p></div><span>{rulesInUse.length} regra(s) em uso</span></div>
     {!rulesInUse.length?<div className="employee-empty"><ShieldAlert size={22}/><b>Nenhuma regra normativa vinculada às escalas do período</b><p>Vincule a escala a uma regra validada e vigente para a competência.</p></div>:
-    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra / Fonte</th><th>Categoria profissional</th><th>Vigência na competência</th><th>Status</th><th>Parâmetros de parcelas variáveis</th></tr></thead><tbody>{rulesInUse.map(rule=>{
+    <div className="table-scroll"><table className="employee-table"><thead><tr><th>Regra / Fonte</th><th>Categoria profissional</th><th>Vigência na competência</th><th>Status</th><th>Parâmetros de parcelas variáveis</th><th>Fonte documental conferida</th></tr></thead><tbody>{rulesInUse.map(rule=>{
       const competenceStart=month+"-01";
       const competenceEnd=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
       const validFrom=Boolean(rule.validity_from&&rule.validity_from<=competenceStart);
@@ -391,9 +391,9 @@ export default function DsrMemoryPage(){
       const params=categoryParameters.filter(p=>p.dsr_rule_id===rule.id&&p.effective_from<=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10)&&(!p.effective_to||p.effective_to>=month+"-01"));
       const parameterText=["overtime","commission","additional","bonus","other"].map(cat=>{
        const p=params.filter(x=>x.category===cat&&x.status==="validated").sort((a,b)=>b.version-a.version)[0];
-       return categoryLabel(cat)+": "+(p?(p.unit==="days"?"por dias":"por horas")+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR"):"sem parâmetro validado");
+       const doc=p?.source_document_id?ruleDocuments.find(d=>d.id===p.source_document_id):null;\n       return categoryLabel(cat)+": "+(p?(p.unit==="days"?"por dias":"por horas")+" · divisor "+Number(p.denominator).toLocaleString("pt-BR")+" · repousos "+Number(p.rest_units).toLocaleString("pt-BR")+" · "+(p.source_document_id?(doc?doc.file_name:"PDF não localizado"):(p.source_reference||"sem referência documental")):"sem parâmetro validado");
       });
-      return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{!rule.validity_from?"Vigência inicial não informada":ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="suspended"?"Suspensa":rule.status!=="validated"?"Pendente de validação":!rule.validity_from?"Validade incompleta":ruleCurrent?"Validada e vigente":"Validada, fora da vigência"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td></tr>;
+      return <tr key={rule.id}><td><b>{rule.rule_name}</b><br/><small>{rule.source_type.toUpperCase()} · {rule.union_name||"Entidade não informada"}</small></td><td>{rule.professional_category||"Não informada"}</td><td>{!rule.validity_from?"Vigência inicial não informada":ruleCurrent?"Vigente no período":"Fora da vigência"}</td><td>{rule.status==="suspended"?"Suspensa":rule.status!=="validated"?"Pendente de validação":!rule.validity_from?"Validade incompleta":ruleCurrent?"Validada e vigente":"Validada, fora da vigência"}</td><td>{parameterText.map(t=><div key={t}><small>{t}</small></div>)}</td><td>{ruleDocuments.filter(doc=>doc.dsr_rule_id===rule.id).map(doc=><div key={doc.id}><small>{doc.file_name} · v{doc.document_version} · {new Date(doc.uploaded_at).toLocaleDateString("pt-BR")}</small></div>)}{!ruleDocuments.some(doc=>doc.dsr_rule_id===rule.id)&&<small>{rule.document_reference||rule.source_identifier||"Fonte não documentada"}</small>}</td></tr>;
     })}</tbody></table></div>}
    </div>
    <div className="employee-list-card payroll-list">
