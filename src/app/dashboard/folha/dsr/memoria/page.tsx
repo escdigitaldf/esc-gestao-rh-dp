@@ -16,6 +16,7 @@ type Summary={employee:Employee;schedules:Schedule[];occurrences:Occurrence[];ev
 type ReviewLog={action:string;actor_user_id:string|null;created_at:string;metadata:Record<string,unknown>};
 type ReviewDecision={id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string};
 type ReviewReopening={id:string;reopened_by:string;reason:string;created_at:string};
+type HistoricalCorrection={id:string;target_type:"occurrence"|"schedule";target_id:string;competence_month:string;requested_by:string;requested_at:string;reason:string;original_snapshot:Record<string,unknown>;proposed_snapshot:Record<string,unknown>;status:string;first_approved_by:string|null;second_approved_by:string|null;dsr_historical_correction_decisions:{id:string;reviewer_user_id:string;decision:"approve"|"reject";note:string;created_at:string}[]};
 type FormalReview={id:string;competence_month:string;revision:number;status:string;submitted_by:string;submitted_at:string;first_approved_by:string|null;first_approved_at:string|null;second_approved_by:string|null;second_approved_at:string|null;approved_at:string|null;blocker_count:number;submission_note:string;checklist_snapshot:{label:string;ok:boolean;detail?:string}[];financial_calculation_released:boolean;dsr_competence_review_decisions:ReviewDecision[];dsr_competence_review_reopenings:ReviewReopening[]};
 
 const monthName=(v:string)=>new Date(v+"-15T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
@@ -45,6 +46,13 @@ export default function DsrMemoryPage(){
  const [reviewNote,setReviewNote]=useState("");
  const [decisionNote,setDecisionNote]=useState("");
  const [reopenNote,setReopenNote]=useState("");
+ const [corrections,setCorrections]=useState<HistoricalCorrection[]>([]);
+ const [correctionTargetType,setCorrectionTargetType]=useState<"occurrence"|"schedule">("occurrence");
+ const [correctionTargetId,setCorrectionTargetId]=useState("");
+ const [correctionField,setCorrectionField]=useState("worked_hours");
+ const [correctionValue,setCorrectionValue]=useState("");
+ const [correctionReason,setCorrectionReason]=useState("");
+ const [correctionDecisionNote,setCorrectionDecisionNote]=useState("");
  const [savingReview,setSavingReview]=useState(false);
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState("");
@@ -60,19 +68,20 @@ export default function DsrMemoryPage(){
   const start=month+"-01";
   setOrganizationId(membership.organization_id);setCurrentUserId(user.id);setCurrentRole(membership.role||"");
   const end=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),0).toISOString().slice(0,10);
-  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal]=await Promise.all([
+  const [emp,sch,occ,ev,rub,rule,param,hol,history,formal,correctionRows]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,employment_status").eq("organization_id",membership.organization_id).order("full_name"),
-   s.from("employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
-   s.from("employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
+   s.from("dsr_effective_employee_work_schedules").select("id,employee_id,dsr_rule_id,schedule_name,schedule_type,effective_from,effective_to,dsr_rule_status,weekly_hours,cycle_days,work_days,weekly_rest_days,cycle_pattern").eq("organization_id",membership.organization_id).lte("effective_from",end).or("effective_to.is.null,effective_to.gte."+start),
+   s.from("dsr_effective_employee_work_occurrences").select("id,employee_id,work_schedule_id,occurrence_date,occurrence_type,scheduled_hours,worked_hours,record_status").eq("organization_id",membership.organization_id).gte("occurrence_date",start).lte("occurrence_date",end).order("occurrence_date"),
    s.from("payroll_variable_events").select("id,employee_id,rubric_id,code,description,item_type,amount,quantity,unit_value,status,event_date,dsr_category").eq("organization_id",membership.organization_id).eq("competence",start).eq("affects_dsr",true).in("status",["pending","approved","processed"]).order("event_date"),
    s.from("payroll_rubrics").select("id,code,description,item_type,affects_dsr,dsr_category,active").eq("organization_id",membership.organization_id).eq("active",true).order("code"),
    s.from("organization_dsr_rules").select("id,rule_name,professional_category,union_name,source_type,validity_from,validity_to,status,calculation_method").eq("organization_id",membership.organization_id).order("rule_name"),
    s.from("organization_dsr_rule_category_parameters").select("id,dsr_rule_id,category,unit,denominator,rest_units,effective_from,effective_to,status,justification,source_reference,version").eq("organization_id",membership.organization_id).order("category"),
    s.from("organization_holidays").select("id,holiday_date,name,holiday_scope,state_code,city,is_optional_workday").eq("organization_id",membership.organization_id).gte("holiday_date",start).lte("holiday_date",end),
    s.from("audit_logs").select("action,actor_user_id,created_at,metadata").eq("organization_id",membership.organization_id).eq("resource_type","dsr_competence_review").eq("resource_id",start).order("created_at",{ascending:false}).limit(20),
-   s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false})
+   s.from("dsr_competence_reviews").select("id,competence_month,revision,status,submitted_by,submitted_at,first_approved_by,first_approved_at,second_approved_by,second_approved_at,approved_at,blocker_count,submission_note,checklist_snapshot,financial_calculation_released,dsr_competence_review_decisions(id,reviewer_user_id,decision,note,created_at),dsr_competence_review_reopenings(id,reopened_by,reason,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("revision",{ascending:false}),
+   s.from("dsr_historical_correction_requests").select("id,target_type,target_id,competence_month,requested_by,requested_at,reason,original_snapshot,proposed_snapshot,status,first_approved_by,second_approved_by,dsr_historical_correction_decisions(id,reviewer_user_id,decision,note,created_at)").eq("organization_id",membership.organization_id).eq("competence_month",start).order("requested_at",{ascending:false})
   ]);
-  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error;
+  const issue=emp.error||sch.error||occ.error||ev.error||rub.error||rule.error||param.error||hol.error||history.error||formal.error||correctionRows.error;
   if(issue)setError(issue.message);
   setEmployees((emp.data||[]) as Employee[]);
   setSchedules((sch.data||[]) as Schedule[]);
@@ -84,6 +93,7 @@ export default function DsrMemoryPage(){
   setHolidays((hol.data||[]) as Holiday[]);
   setReviewHistory((history.data||[]) as ReviewLog[]);
   setFormalReviews((formal.data||[]) as unknown as FormalReview[]);
+  setCorrections((correctionRows.data||[]) as unknown as HistoricalCorrection[]);
   setRefreshed(new Date().toLocaleString("pt-BR"));
   setLoading(false);
  },[router,month]);
@@ -233,6 +243,40 @@ export default function DsrMemoryPage(){
   else{setReopenNote("");await load();}
   setSavingReview(false);
  };
+ const correctionFields=correctionTargetType==="occurrence"
+  ? [{value:"occurrence_type",label:"Tipo de ocorrência"},{value:"scheduled_hours",label:"Horas previstas"},{value:"worked_hours",label:"Horas trabalhadas"},{value:"notes",label:"Observações"}]
+  : [{value:"schedule_name",label:"Nome da escala"},{value:"weekly_hours",label:"Carga horária semanal"},{value:"effective_to",label:"Fim da vigência (AAAA-MM-DD)"}];
+ const correctionTargets=correctionTargetType==="occurrence"
+  ? occurrences.filter(x=>x.record_status==="validated").map(x=>({id:x.id,label:(employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador")+" · "+new Date(x.occurrence_date+"T12:00:00").toLocaleDateString("pt-BR")+" · "+x.occurrence_type}))
+  : schedules.filter(x=>x.dsr_rule_status==="validated").map(x=>({id:x.id,label:(employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador")+" · "+x.schedule_name+" · "+x.effective_from}));
+ const requestCorrection=async()=>{
+  if(!canReview){setError("Seu perfil não pode solicitar retificação.");return;}
+  if(!correctionTargetId){setError("Selecione o registro validado que será retificado.");return;}
+  if(correctionReason.trim().length<20){setError("A justificativa deve conter pelo menos 20 caracteres.");return;}
+  let value:unknown=correctionValue;
+  if(["worked_hours","scheduled_hours","weekly_hours"].includes(correctionField)){
+   value=Number(correctionValue);
+   if(!Number.isFinite(value)||Number(value)<0){setError("Informe um valor numérico válido e não negativo.");return;}
+  }
+  if(correctionField==="effective_to"&&correctionValue.trim()&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(correctionValue)){setError("Informe a data no formato AAAA-MM-DD.");return;}
+  if(correctionField==="effective_to"&&!correctionValue.trim())value=null;
+  setSavingReview(true);setError("");
+  const s=createClient();
+  const {error:requestError}=await s.rpc("request_dsr_historical_correction",{p_target_type:correctionTargetType,p_target_id:correctionTargetId,p_changes:{[correctionField]:value},p_reason:correctionReason.trim()});
+  if(requestError)setError("Não foi possível solicitar a retificação: "+requestError.message);
+  else{setCorrectionReason("");setCorrectionValue("");await load();}
+  setSavingReview(false);
+ };
+ const decideCorrection=async(requestId:string,decision:"approve"|"reject")=>{
+  if(!canReview){setError("Seu perfil não pode decidir retificações.");return;}
+  if(correctionDecisionNote.trim().length<20){setError("A justificativa da decisão deve conter pelo menos 20 caracteres.");return;}
+  setSavingReview(true);setError("");
+  const s=createClient();
+  const {error:decisionError}=await s.rpc("decide_dsr_historical_correction",{p_request_id:requestId,p_decision:decision,p_note:correctionDecisionNote.trim()});
+  if(decisionError)setError("Não foi possível decidir a retificação: "+decisionError.message);
+  else{setCorrectionDecisionNote("");await load();}
+  setSavingReview(false);
+ };
  const totals=useMemo(()=>({draft:occurrences.filter(x=>x.record_status==="draft").length,validated:occurrences.filter(x=>x.record_status==="validated").length,rejected:occurrences.filter(x=>x.record_status==="rejected").length,unvalidatedSchedules:schedules.filter(x=>x.dsr_rule_status!=="validated").length,dsrEvents:events.length,approvedEvents:events.filter(x=>x.status==="approved").length,pendingEvents:events.filter(x=>x.status==="pending").length,processedEvents:events.filter(x=>x.status==="processed").length,approvedAmount:events.filter(x=>x.status==="approved").reduce((a,x)=>a+eventAmount(x),0)}),[occurrences,schedules,events]);
 
  if(loading)return <div className="loading-screen">Preparando memória preliminar do DSR...</div>;
@@ -325,6 +369,19 @@ export default function DsrMemoryPage(){
     <div className="employee-list-head"><div><h2>Eventos variáveis com incidência de DSR</h2><p>Valores são exibidos apenas para conferência da base informativa; não representam DSR calculado.</p></div><span>{events.length} evento(s)</span></div>
     {!events.length?<div className="employee-empty"><Clock size={22}/><b>Nenhum evento com incidência de DSR</b><p>Eventos aprovados serão listados aqui para compor a futura memória de cálculo.</p></div>:
     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Data</th><th>Rubrica</th><th>Classificação DSR</th><th>Valor do evento</th><th>Conferência da origem</th><th>Situação</th></tr></thead><tbody>{events.map(x=><tr key={x.id}><td>{employees.find(e=>e.id===x.employee_id)?.full_name||"Colaborador"}</td><td>{x.event_date?new Date(x.event_date+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{x.code} · {x.description}</td><td>{dsrCategoryName(x.dsr_category)}</td><td>{money(eventAmount(x))}</td><td>{eventAudit(x)}</td><td>{x.status==="approved"?"Aprovado":x.status==="processed"?"Já processado na folha":"Pendente de aprovação"}</td></tr>)}</tbody></table></div>}
+   </div>
+   <div className="employee-list-card payroll-list">
+    <div className="employee-list-head"><div><h2>Retificação histórica de registros validados</h2><p>Correções ficam em camada auditável, sem sobrescrever o apontamento original. A memória efetiva incorpora a proposta somente após duas aprovações independentes.</p></div><span>{corrections.length} solicitação(ões)</span></div>
+    <div className="form-grid">
+     <label>Tipo de registro<select value={correctionTargetType} onChange={e=>{const t=e.target.value as "occurrence"|"schedule";setCorrectionTargetType(t);setCorrectionTargetId("");setCorrectionField(t==="occurrence"?"worked_hours":"schedule_name");setCorrectionValue("");}}><option value="occurrence">Ocorrência diária</option><option value="schedule">Escala de trabalho</option></select></label>
+     <label>Registro validado<select value={correctionTargetId} onChange={e=>setCorrectionTargetId(e.target.value)}><option value="">Selecione...</option>{correctionTargets.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></label>
+     <label>Campo a corrigir<select value={correctionField} onChange={e=>setCorrectionField(e.target.value)}>{correctionFields.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
+     <label>Novo valor<input value={correctionValue} onChange={e=>setCorrectionValue(e.target.value)} placeholder={correctionField==="effective_to"?"AAAA-MM-DD ou vazio":correctionField.includes("hours")?"Ex.: 8.00":"Informe o valor correto"}/></label>
+    </div>
+    <label className="review-note-label">Justificativa da retificação<textarea value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)} minLength={20} rows={3} placeholder="Descreva o erro, a documentação de suporte e o motivo da correção..."/></label>
+    <button className="employee-primary" onClick={()=>void requestCorrection()} disabled={savingReview||!canReview||!correctionTargetId||correctionReason.trim().length<20}>Solicitar retificação para dupla aprovação</button>
+    <p className="form-hint">O solicitante não aprova a própria solicitação. A segunda aprovação deve ser de pessoa diferente da primeira. O registro original permanece preservado.</p>
+    {corrections.length>0&&<><h3>Solicitações e trilha de auditoria</h3>{corrections.map(item=><div className="dependent-privacy" key={item.id}><div style={{width:"100%"}}><b>{item.target_type==="occurrence"?"Ocorrência":"Escala"} · {item.status==="awaiting_first_approval"?"Aguardando primeira aprovação":item.status==="awaiting_second_approval"?"Aguardando segunda aprovação":item.status==="approved"?"Aprovada e aplicada à memória efetiva":"Rejeitada"}</b><p>Solicitada em {new Date(item.requested_at).toLocaleString("pt-BR")} · solicitante: {item.requested_by}</p><p>{item.reason}</p><p><b>Original:</b> {JSON.stringify(item.original_snapshot)}</p><p><b>Proposta:</b> {JSON.stringify(item.proposed_snapshot)}</p>{item.dsr_historical_correction_decisions?.map(d=><p key={d.id}>{d.decision==="approve"?"Aprovada por":"Rejeitada por"} {d.reviewer_user_id} em {new Date(d.created_at).toLocaleString("pt-BR")}: {d.note}</p>)}{canReview&&item.status.startsWith("awaiting_")&&item.requested_by!==currentUserId&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="employee-primary" disabled={savingReview||correctionDecisionNote.trim().length<20} onClick={()=>void decideCorrection(item.id,"approve")}>{item.status==="awaiting_first_approval"?"Registrar primeira aprovação":"Registrar segunda aprovação"}</button><button className="employee-secondary" disabled={savingReview||correctionDecisionNote.trim().length<20} onClick={()=>void decideCorrection(item.id,"reject")}>Rejeitar retificação</button></div>}</div></div>)}<label className="review-note-label">Justificativa da aprovação ou rejeição<textarea value={correctionDecisionNote} onChange={e=>setCorrectionDecisionNote(e.target.value)} minLength={20} rows={3} placeholder="Registre a análise dos documentos e o fundamento da decisão..."/></label></>}
    </div>
    <div className="dependent-privacy"><Clock size={16}/><span>Atualizado em {refreshed||"—"}. Próxima etapa: vincular a regra do DSR à convenção/acordo coletivo aplicável e ao regime de jornada, validar a cobertura diária e somente então liberar o cálculo financeiro e a integração atômica com a folha.</span></div>
   </section>
