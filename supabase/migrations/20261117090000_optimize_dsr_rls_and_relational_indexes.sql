@@ -1,0 +1,13 @@
+DROP POLICY IF EXISTS employee_dsr_normative_assignments_select ON public.employee_dsr_normative_assignments;
+CREATE POLICY employee_dsr_normative_assignments_select ON public.employee_dsr_normative_assignments FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.organization_memberships AS m WHERE m.organization_id = employee_dsr_normative_assignments.organization_id AND m.user_id = (SELECT auth.uid()) AND m.status = 'active'));
+DROP INDEX IF EXISTS public.employees_organization_id_id_uidx;
+CREATE INDEX IF NOT EXISTS dsr_comp_review_decisions_review_org_idx ON public.dsr_competence_review_decisions (review_id, organization_id);
+CREATE INDEX IF NOT EXISTS dsr_comp_review_decisions_reviewer_idx ON public.dsr_competence_review_decisions (reviewer_user_id);
+CREATE INDEX IF NOT EXISTS dsr_comp_review_reopenings_review_org_idx ON public.dsr_competence_review_reopenings (review_id, organization_id);
+CREATE INDEX IF NOT EXISTS dsr_comp_review_reopenings_reopened_by_idx ON public.dsr_competence_review_reopenings (reopened_by);
+CREATE INDEX IF NOT EXISTS dsr_hist_correction_decisions_request_org_idx ON public.dsr_historical_correction_decisions (request_id, organization_id);
+CREATE INDEX IF NOT EXISTS dsr_hist_correction_decisions_reviewer_idx ON public.dsr_historical_correction_decisions (reviewer_user_id);
+CREATE INDEX IF NOT EXISTS employee_dsr_norm_assignments_employee_org_idx ON public.employee_dsr_normative_assignments (employee_id, organization_id);
+CREATE INDEX IF NOT EXISTS employee_dsr_norm_assignments_rule_org_idx ON public.employee_dsr_normative_assignments (dsr_rule_id, organization_id);
+CREATE INDEX IF NOT EXISTS employee_work_occurrences_schedule_owner_idx ON public.employee_work_occurrences (organization_id, employee_id, work_schedule_id);
+CREATE INDEX IF NOT EXISTS employee_work_occurrences_holiday_org_idx ON public.employee_work_occurrences (organization_id, holiday_id);
