@@ -88,7 +88,7 @@ export default function ThirteenthPayrollPage() {
           .eq("organization_id", membership.organization_id)
           .in("employee_id", employeeIds)
           .lte("effective_from", yearEnd)
-          .or(`effective_to.is.null,effective_to.gte.${yearEnd}`)
+          .or(`effective_to.is.null,effective_to.gte.${yearStart}`)
           .order("effective_from", { ascending: false })
       : { data: [], error: null };
     if (historyError) {
@@ -98,22 +98,34 @@ export default function ThirteenthPayrollPage() {
     }
 
     const computed = await Promise.all((employees || []).map(async (employee): Promise<Preview> => {
-      const salaryRows = (history || []).filter((row: any) =>
+      const salaryAtDate = (date: string) => (history || []).filter((row: any) =>
         row.employee_id === employee.id &&
-        row.effective_from <= yearEnd &&
-        (!row.effective_to || row.effective_to >= yearEnd)
+        row.effective_from <= date &&
+        (!row.effective_to || row.effective_to >= date)
       );
-      if (salaryRows.length !== 1 || !["monthly", "mensal"].includes(String(salaryRows[0]?.salary_type || "").toLowerCase())) {
-        return { employee, salary: null, eligibleMonths: 0, gross: 0, firstInstallment: 0,
-          issue: salaryRows.length > 1 ? "Histórico salarial sobreposto em 31/12." : "Sem salário mensal validado em 31/12." };
+      const decemberSalaryRows = salaryAtDate(yearEnd);
+      const paymentSalaryRows = salaryAtDate(paymentDate);
+      if (!employee.admission_date) {
+        return { employee, salary: null, eligibleMonths: 0, gross: 0, firstInstallment: 0, issue: "Data de admissão não cadastrada." };
       }
-      const salary = Number(salaryRows[0].salary_amount);
-      if (!Number.isFinite(salary) || salary <= 0) {
+      if (decemberSalaryRows.length !== 1 || paymentSalaryRows.length !== 1) {
+        return { employee, salary: null, eligibleMonths: 0, gross: 0, firstInstallment: 0,
+          issue: "Histórico salarial sem cobertura única na data do pagamento ou em 31/12." };
+      }
+      if (![decemberSalaryRows[0], paymentSalaryRows[0]].every((row: any) => ["monthly", "mensal"].includes(String(row.salary_type || "").toLowerCase()))) {
+        return { employee, salary: null, eligibleMonths: 0, gross: 0, firstInstallment: 0, issue: "Remuneração não mensal: cálculo manual necessário." };
+      }
+      const salary = Number(decemberSalaryRows[0].salary_amount);
+      const paymentSalary = Number(paymentSalaryRows[0].salary_amount);
+      if (!Number.isFinite(salary) || salary <= 0 || !Number.isFinite(paymentSalary) || paymentSalary <= 0) {
         return { employee, salary: null, eligibleMonths: 0, gross: 0, firstInstallment: 0, issue: "Salário inválido." };
+      }
+      if (salary !== paymentSalary) {
+        return { employee, salary, eligibleMonths: 0, gross: 0, firstInstallment: 0, issue: "Houve alteração salarial entre o pagamento e 31/12; revise manualmente o adiantamento." };
       }
       const { data: calculation, error: calculationError } = await supabase.rpc("calculate_fixed_monthly_thirteenth", {
         p_monthly_salary: salary,
-        p_admission_date: employee.admission_date || yearStart,
+        p_admission_date: employee.admission_date,
         p_termination_date: employee.termination_date,
         p_year: year,
       });
@@ -123,7 +135,7 @@ export default function ThirteenthPayrollPage() {
       const result = Array.isArray(calculation) ? calculation[0] : calculation;
       const months = Number(result?.eligible_months || 0);
       const gross = Number(result?.thirteenth_amount || 0);
-      return { employee, salary, eligibleMonths: months, gross, firstInstallment: Math.round(gross * 50) / 100, issue: null };
+      return { employee, salary, eligibleMonths: months, gross, firstInstallment: Math.round((salary * months / 12 * 0.5 + Number.EPSILON) * 100) / 100, issue: null };
     }));
     setPreviews(computed);
 
@@ -136,9 +148,9 @@ export default function ThirteenthPayrollPage() {
     if (advanceError) setError("Prévia carregada, mas não foi possível consultar adiantamentos: " + advanceError.message);
     setAdvances((advanceRows || []) as Advance[]);
     setLoading(false);
-  }, [router, year]);
+  }, [router, year, paymentDate]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);\n  useEffect(() => { setPaymentDate(`${year}-11-30`); }, [year]);
 
   const advanceByEmployee = useMemo(() => new Map(advances.map((advance) => [advance.employee_id, advance])), [advances]);
   const totalGross = previews.reduce((sum, row) => sum + row.gross, 0);
