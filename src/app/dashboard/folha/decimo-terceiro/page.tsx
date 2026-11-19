@@ -21,6 +21,7 @@ type Advance = {
   payment_date: string;
   status: "planned" | "paid" | "reversed";
   notes: string | null;
+  created_at: string;
 };
 type Preview = {
   employee: Employee;
@@ -141,10 +142,10 @@ export default function ThirteenthPayrollPage() {
 
     const { data: advanceRows, error: advanceError } = await supabase
       .from("payroll_thirteenth_advances")
-      .select("id,employee_id,tax_year,amount,payment_date,status,notes")
+      .select("id,employee_id,tax_year,amount,payment_date,status,notes,created_at")
       .eq("organization_id", membership.organization_id)
       .eq("tax_year", year)
-      .order("payment_date");
+      .order("created_at");
     if (advanceError) setError("Prévia carregada, mas não foi possível consultar adiantamentos: " + advanceError.message);
     setAdvances((advanceRows || []) as Advance[]);
     setLoading(false);
@@ -153,7 +154,8 @@ export default function ThirteenthPayrollPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setPaymentDate(`${year}-11-30`); }, [year]);
 
-  const advanceByEmployee = useMemo(() => new Map(advances.map((advance) => [advance.employee_id, advance])), [advances]);
+  const advanceByEmployee = useMemo(() => new Map(advances.filter((advance) => advance.status !== "reversed").map((advance) => [advance.employee_id, advance])), [advances]);
+  const latestReversedByEmployee = useMemo(() => new Map(advances.filter((advance) => advance.status === "reversed").map((advance) => [advance.employee_id, advance])), [advances]);
   const totalGross = previews.reduce((sum, row) => sum + row.gross, 0);
   const totalAdvance = previews.reduce((sum, row) => sum + row.firstInstallment, 0);
   const pendingCount = previews.filter((row) => row.issue).length;
@@ -248,14 +250,15 @@ export default function ThirteenthPayrollPage() {
             <thead><tr><th>Matrícula</th><th>Colaborador</th><th>Salário em 31/12</th><th>Avos</th><th>13º bruto</th><th>1ª parcela (50%)</th><th>Adiantamento</th><th>Ação</th></tr></thead>
             <tbody>{previews.map((row) => {
               const advance = advanceByEmployee.get(row.employee.id);
+              const lastReversed = latestReversedByEmployee.get(row.employee.id);
               return <tr key={row.employee.id}>
                 <td>{row.employee.employee_code}</td><td><b>{row.employee.full_name}</b>{row.issue && <small className="field-error">{row.issue}</small>}</td>
                 <td>{row.salary === null ? "—" : brl(row.salary)}</td><td>{row.eligibleMonths}/12</td><td>{brl(row.gross)}</td><td>{brl(row.firstInstallment)}</td>
-                <td>{advance ? <span className={advance.status === "paid" ? "dependent-active" : "dependent-inactive"}>{advance.status === "paid" ? "Pago" : advance.status === "reversed" ? "Estornado" : "Planejado"} · {brl(advance.amount)}</span> : "Não registrado"}</td>
+                <td>{advance ? <span className={advance.status === "paid" ? "dependent-active" : "dependent-inactive"}>{advance.status === "paid" ? "Pago" : "Planejado"} · {brl(advance.amount)}</span> : lastReversed ? <span className="dependent-inactive">Último estorno · {brl(lastReversed.amount)}</span> : "Não registrado"}</td>
                 <td>{advance ? <div className="table-actions">
                   {advance.status === "planned" && <button className="employee-secondary" disabled={savingId === advance.id} onClick={() => void markPaid(advance)}><CheckCircle2 size={14}/> Baixar pagamento</button>}
                   {advance.status !== "reversed" && <><input aria-label="Motivo do estorno" placeholder="Motivo do estorno" value={reverseReason[advance.id] || ""} onChange={(event) => setReverseReason((old) => ({...old,[advance.id]:event.target.value}))}/><button className="employee-secondary" disabled={savingId === advance.id} onClick={() => void reverseAdvance(advance)}>Estornar</button></>}
-                </div> : <button className="employee-primary" disabled={!!row.issue || row.firstInstallment <= 0 || savingId === row.employee.id} onClick={() => void registerAdvance(row)}>{savingId === row.employee.id ? "Registrando..." : "Registrar 1ª parcela"}</button>}</td>
+                </div> : <div className="table-actions">{lastReversed && <small>Estorno preservado no histórico. Um novo lançamento pode ser registrado.</small>}<button className="employee-primary" disabled={!!row.issue || row.firstInstallment <= 0 || savingId === row.employee.id} onClick={() => void registerAdvance(row)}>{savingId === row.employee.id ? "Registrando..." : "Registrar 1ª parcela"}</button></div>}</td>
               </tr>;
             })}</tbody>
           </table></div>}
