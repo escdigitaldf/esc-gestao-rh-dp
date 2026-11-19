@@ -36,7 +36,7 @@ export default function StatutoryReconciliationPage(){
   if(draft.paid_at&&!draft.paid_amount.trim()){setError("Informe o valor pago antes da data do pagamento.");return;}
   setSaving(row.obligation_key);setError("");setSuccess("");
   try{const s=createClient();const {data:{user},error:auth}=await s.auth.getUser();if(auth||!user)throw auth||new Error("Sessão expirada.");
-   const {error:e}=await s.from("payroll_statutory_guide_values").upsert({organization_id:org,payroll_run_id:selected,obligation_key:row.obligation_key,guide_reference:draft.guide_reference.trim(),assessed_amount:assessed,paid_amount:paid,due_date:draft.due_date||null,paid_at:draft.paid_at||null,evidence_reference:draft.evidence_reference.trim()||null,notes:draft.notes.trim()||null},{onConflict:"payroll_run_id,obligation_key");
+   const {error:e}=await s.from("payroll_statutory_guide_values").upsert({organization_id:org,payroll_run_id:selected,obligation_key:row.obligation_key,guide_reference:draft.guide_reference.trim(),assessed_amount:assessed,paid_amount:paid,due_date:draft.due_date||null,paid_at:draft.paid_at||null,evidence_reference:draft.evidence_reference.trim()||null,notes:draft.notes.trim()||null},{onConflict:"payroll_run_id,obligation_key"});
    if(e)throw e;setSuccess("Informações da guia registradas com trilha de auditoria.");await load();
   }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a guia.");}finally{setSaving("");}
  }
