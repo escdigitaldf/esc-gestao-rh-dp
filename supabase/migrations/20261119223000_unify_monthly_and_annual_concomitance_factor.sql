@@ -34,6 +34,9 @@ begin
         || E'\n' || '              into v_factor, v_annex_iv_revenue, v_total_gross_revenue'
         || E'\n' || '            from public.get_simples_annex_iv_concomitance_factor(v_org,v_competence,v_payroll_type) f;'
         || E'\n' || '          exception when others then'
+        || E'\n' || '            v_factor := 0;'
+        || E'\n' || '            v_annex_iv_revenue := 0;'
+        || E'\n' || '            v_total_gross_revenue := 0;'
         || E'\n' || '            v_issue := ''Fator de concomitância não validado: '' || SQLERRM;'
         || E'\n' || '          end;';
 
