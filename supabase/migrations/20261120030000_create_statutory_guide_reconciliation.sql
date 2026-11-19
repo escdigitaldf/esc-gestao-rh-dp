@@ -19,8 +19,8 @@ create table if not exists public.payroll_statutory_guide_values (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint payroll_statutory_guide_values_run_fk
-    foreign key (payroll_run_id, organization_id)
-    references public.payroll_runs(id, organization_id) on delete restrict,
+    foreign key (organization_id, payroll_run_id)
+    references public.payroll_runs(organization_id, id) on delete restrict,
   constraint payroll_statutory_guide_values_run_obligation_key
     unique (payroll_run_id, obligation_key),
   constraint payroll_statutory_guide_values_payment_date_chk
