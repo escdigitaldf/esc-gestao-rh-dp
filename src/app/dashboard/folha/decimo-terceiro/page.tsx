@@ -150,7 +150,8 @@ export default function ThirteenthPayrollPage() {
     setLoading(false);
   }, [router, year, paymentDate]);
 
-  useEffect(() => { void load(); }, [load]);\n  useEffect(() => { setPaymentDate(`${year}-11-30`); }, [year]);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setPaymentDate(`${year}-11-30`); }, [year]);
 
   const advanceByEmployee = useMemo(() => new Map(advances.map((advance) => [advance.employee_id, advance])), [advances]);
   const totalGross = previews.reduce((sum, row) => sum + row.gross, 0);
