@@ -28,7 +28,7 @@ with item_audit as (
     count(*) filter (where i.payroll_variable_event_id is not null and exists (
       select 1 from public.payroll_variable_events ev
       where ev.id=i.payroll_variable_event_id and ev.organization_id=i.organization_id
-        and (ev.rubric_id is distinct from i.rubric_id or ev.item_type is distinct from i.item_type
+        and (ev.rubric_id is distinct from i.rubric_id or ev.code is distinct from i.code or ev.amount is distinct from i.amount or ev.item_type is distinct from i.item_type
           or ev.affects_inss is distinct from i.affects_inss or ev.affects_irrf is distinct from i.affects_irrf
           or ev.affects_fgts is distinct from i.affects_fgts or ev.affects_dsr is distinct from i.affects_dsr
           or ev.affects_employer_inss is distinct from i.affects_employer_inss
