@@ -29,9 +29,13 @@ begin
         || E'\n' || '            end if;'
         || E'\n' || '          end if;';
 
-  v_new := '          select f.factor, f.annex_iv_revenue, f.total_gross_revenue'
-        || E'\n' || '            into v_factor, v_annex_iv_revenue, v_total_gross_revenue'
-        || E'\n' || '          from public.get_simples_annex_iv_concomitance_factor(v_org,v_competence,v_payroll_type) f;';
+  v_new := '          begin'
+        || E'\n' || '            select f.factor, f.annex_iv_revenue, f.total_gross_revenue'
+        || E'\n' || '              into v_factor, v_annex_iv_revenue, v_total_gross_revenue'
+        || E'\n' || '            from public.get_simples_annex_iv_concomitance_factor(v_org,v_competence,v_payroll_type) f;'
+        || E'\n' || '          exception when others then'
+        || E'\n' || '            v_issue := ''Fator de concomitância não validado: '' || SQLERRM;'
+        || E'\n' || '          end;';
 
   if position(v_old in v_definition)=0 then
     raise exception 'Não foi possível localizar o bloco de cálculo mensal/anual do fator de concomitância. Migração cancelada sem alteração.';
