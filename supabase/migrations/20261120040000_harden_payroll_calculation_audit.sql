@@ -98,7 +98,6 @@ select r.organization_id,r.id as payroll_run_id,r.reference_month as competence,
   (abs(r.total_earnings-coalesce(sum(e.gross_amount),0))>0.01) as gross_mismatch,
   (abs(r.total_deductions-coalesce(sum(e.deductions_amount),0))>0.01) as deductions_mismatch,
   (abs(r.total_net-coalesce(sum(e.net_amount),0))>0.01) as net_mismatch,
-  count(e.id) filter (where e.status not in ('valid','closed'))::integer as entries_not_finalized
 from public.payroll_runs r
 left join public.payroll_entries e on e.payroll_run_id=r.id and e.organization_id=r.organization_id
 group by r.organization_id,r.id,r.reference_month,r.status,r.employee_count,r.total_earnings,r.total_deductions,r.total_net;
