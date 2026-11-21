@@ -221,14 +221,15 @@ components as (
     ('rat'::text,'RAT ajustado pelo FAP'::text),
     ('third_parties'::text,'Terceiros'::text),
     ('payroll_pis'::text,'PIS sobre folha'::text),
-    ('fgts'::text,'FGTS'::text)
+    ('fgts'::text,'FGTS'::text),
+    ('unclassified'::text,'Não classificado'::text)
   ) c(contribution_key,contribution_label)
 ),
 processed as (
   select c.organization_id,c.preview_id,c.payroll_run_id,c.payroll_entry_id,c.contribution_key,
     coalesce(sum(i.amount) filter(where c.contribution_key='fgts' and i.code='FGTS_MENSAL'),0)::numeric(14,2) as fgts_amount,
     coalesce(sum(i.amount) filter(where m.status='validated' and m.contribution_key=c.contribution_key),0)::numeric(14,2) as mapped_amount,
-    coalesce(sum(i.amount) filter(where m.status='pending' or m.id is null and i.code like 'PARAM_%'),0)::numeric(14,2) as unclassified_amount
+    coalesce(sum(i.amount) filter(where c.contribution_key='unclassified' and (m.status='pending' or m.status='inactive' or m.contribution_key='other' or (m.id is null and left(i.code,6)='PARAM_'))),0)::numeric(14,2) as unclassified_amount
   from components c
   left join public.payroll_entry_items i
     on i.organization_id=c.organization_id and i.payroll_entry_id::text=c.payroll_entry_id
@@ -240,17 +241,19 @@ processed as (
 select c.organization_id,c.preview_id,c.payroll_run_id,c.competence,c.preview_status,c.calculation_version,
   c.payroll_entry_id,c.employee_id,c.employee_code,c.employee_name,c.cost_center,
   c.preview_employee_status,c.blocking_issue,c.contribution_key,c.contribution_label,
-  case when c.contribution_key='fgts' then null else c.preview_amount end as preview_amount,
+  case when c.contribution_key in ('fgts','unclassified') then null else c.preview_amount end as preview_amount,
   case when c.contribution_key='fgts' then p.fgts_amount else p.mapped_amount end as processed_amount,
   p.unclassified_amount,
   case
     when c.preview_status<>'preview' then 'preview_blocked'
     when c.contribution_key='fgts' then 'fgts_processed_only'
+    when c.contribution_key='unclassified' and p.unclassified_amount>0 then 'mapping_pending'
+    when c.contribution_key='unclassified' then 'no_unclassified_amount'
     when p.unclassified_amount>0 then 'mapping_pending'
     when abs(p.mapped_amount-c.preview_amount)<=0.01 then 'matched'
     else 'amount_difference'
   end as reconciliation_status,
-  case when c.contribution_key='fgts' then null
+  case when c.contribution_key in ('fgts','unclassified') then null
        else round(p.mapped_amount-c.preview_amount,2) end as difference_amount
 from components c
 join processed p on p.organization_id=c.organization_id and p.preview_id=c.preview_id
