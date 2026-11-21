@@ -169,7 +169,7 @@ begin
     raise exception 'Não foi possível localizar a competência do encargo parametrizado.';
   end if;
   v_table_code := substring(new.code from 7);
-  select count(*)::integer, min(p.id)
+  select count(*)::integer, (array_agg(p.id))[1]
     into v_match_count, v_parameter_id
   from public.payroll_parameter_tables p
   where p.organization_id=new.organization_id
