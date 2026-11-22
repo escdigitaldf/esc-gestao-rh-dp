@@ -55,16 +55,20 @@ export default function TerminationThirteenthCalculator({
 
   const base = Number(fixedBase) + Number(variableAverage || 0);
   const termination = useMemo(() => countThirteenthAvos(admissionDate, terminationDate), [admissionDate, terminationDate]);
+  const projectionCrossesYear = !!projectedNoticeEndDate
+    && new Date(projectedNoticeEndDate + "T00:00:00Z").getUTCFullYear()
+      !== new Date(terminationDate + "T00:00:00Z").getUTCFullYear();
   const projectionEligible = reason === "employer_without_cause" && noticeType === "indemnified"
-    && !!projectedNoticeEndDate && projectedNoticeEndDate > terminationDate;
+    && !!projectedNoticeEndDate && projectedNoticeEndDate > terminationDate && !projectionCrossesYear;
   const projected = useMemo(
     () => projectedNoticeEndDate && projectedNoticeEndDate > terminationDate
       ? countThirteenthAvos(admissionDate, projectedNoticeEndDate)
       : null,
     [admissionDate, projectedNoticeEndDate, terminationDate]
   );
-  const projectedAvos = projectionEligible && projectionConfirmed && projected
-    ? Math.max(0, projected.avos - termination.avos) : 0;
+  const projectionNeedsConfirmation = projectionEligible && !!projected && projected.avos > termination.avos;
+  const projectedAvos = projectionNeedsConfirmation && projectionConfirmed && projected
+    ? projected.avos - termination.avos : 0;
   const validBase = fixedBase !== "" && Number.isFinite(Number(fixedBase)) && Number(fixedBase) > 0
     && variableAverage !== "" && Number.isFinite(Number(variableAverage)) && Number(variableAverage) >= 0
     && base > 0 && baseConfirmed;
@@ -84,7 +88,7 @@ export default function TerminationThirteenthCalculator({
       setError("O 13º proporcional está bloqueado para dispensa por justa causa. Qualquer situação excepcional exige análise jurídica específica.");
       return;
     }
-    if (!validBase || (projectionEligible && projectedAvos > 0 && !projectionConfirmed)) {
+    if (!validBase || (projectionNeedsConfirmation && !projectionConfirmed)) {
       setError("Confirme a remuneração-base e, quando aplicável, a projeção do aviso-prévio.");
       return;
     }
@@ -230,6 +234,7 @@ export default function TerminationThirteenthCalculator({
       </div>
       {blockedByCause ? <div className="notice error">13º proporcional bloqueado para justa causa. Não gere esta verba sem fundamento jurídico específico.</div> : <>
         {!admissionDate && <div className="notice error">A data de admissão não está cadastrada. O cálculo não pode apurar os avos corretamente.</div>}
+        {projectionCrossesYear && noticeType === "indemnified" && <div className="dependent-privacy"><ShieldAlert size={17}/><span>A projeção do aviso ultrapassa o ano-calendário do desligamento. O sistema não distribui automaticamente os avos entre exercícios diferentes; faça a apuração manual e registre a memória com fundamento.</span></div>}
         <div className="dependent-privacy"><ShieldAlert size={17}/><span>O avo é contado quando há pelo menos 15 dias no mês-calendário. A projeção do aviso não é presumida: só é aplicada nesta etapa para dispensa sem justa causa com aviso indenizado e data projetada posterior ao desligamento. Em outras modalidades, valide o enquadramento antes de lançar eventual diferença.</span></div>
         <div className="form-two">
           <label>Remuneração fixa mensal (R$)
@@ -245,17 +250,17 @@ export default function TerminationThirteenthCalculator({
           <div><span>Avos adicionais do aviso</span><b>{projectedAvos}/12</b></div>
           <div><span>13º sobre aviso</span><b>{projectedAmount === null ? "—" : money(projectedAmount)}</b></div>
         </div>
-        {projectionEligible && projected && projectedAvos > 0 && <label className="dependent-privacy">
+        {projectionNeedsConfirmation && projected && <label className="dependent-privacy">
           <input type="checkbox" checked={projectionConfirmed} onChange={e=>setProjectionConfirmed(e.target.checked)}/>
           Confirmo que a data projetada e os avos adicionais do aviso indenizado foram conferidos com o aviso formal e o tempo de serviço.
         </label>}
-        {projectionEligible && projectedAvos === 0 && <div className="dependent-privacy"><ShieldCheck size={17}/><span>A projeção não acrescenta avo além dos já contados até o desligamento; nenhuma rubrica adicional será gerada.</span></div>}
+        {projectionEligible && projected && !projectionNeedsConfirmation && <div className="dependent-privacy"><ShieldCheck size={17}/><span>A projeção não acrescenta avo além dos já contados até o desligamento; nenhuma rubrica adicional será gerada.</span></div>}
         <label className="dependent-privacy">
           <input type="checkbox" checked={baseConfirmed} onChange={e=>setBaseConfirmed(e.target.checked)}/>
           Confirmo que a base considera remuneração fixa devida na rescisão e médias de variáveis/adicionais cabíveis, conforme histórico e documentos.
         </label>
         <div className="dependent-privacy"><ShieldCheck size={17}/><span>O sistema não deduz adiantamentos do 13º, não interpreta automaticamente afastamentos/faltas e não apura médias. As rubricas são gravadas como pré-cálculo, com memória mensal e status pendente de revisão.</span></div>
-        <button className="employee-primary" onClick={()=>void save()} disabled={saving || !validBase || !admissionDate || (projectionEligible && projectedAvos > 0 && !projectionConfirmed)}>
+        <button className="employee-primary" onClick={()=>void save()} disabled={saving || !validBase || !admissionDate || (projectionNeedsConfirmation && !projectionConfirmed)}>
           {saving ? "Registrando..." : "Gerar 13º proporcional"}
         </button>
       </>}
