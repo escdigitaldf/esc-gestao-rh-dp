@@ -8,9 +8,10 @@ import TerminationCaseDataPanel from "./TerminationCaseDataPanel";
 import TerminationRubricGuide from "./TerminationRubricGuide";
 import TerminationPreliminaryCalculator from "./TerminationPreliminaryCalculator";
 import TerminationAcquiredVacationCalculator from "./TerminationAcquiredVacationCalculator";
+import TerminationThirteenthCalculator from "./TerminationThirteenthCalculator";
 
-type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; notice_type: string; case_status: string; calculation_status: string; };
-type Employee = { id: string; employee_code: string; full_name: string; };
+type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; notice_type: string; projected_notice_end_date: string | null; case_status: string; calculation_status: string; };
+type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; };
 type ItemRow = { id: string; item_code: string; description: string; item_type: string; reference_period: string | null; reference_quantity: number | null; reference_unit: string | null; calculation_base: number | null; rate: number | null; amount: number; calculation_method: string; calculation_status: string; legal_basis: string | null; review_notes: string | null; };
 const reasonLabel:Record<string,string>={employer_without_cause:"Dispensa sem justa causa",employee_resignation:"Pedido de demissão",mutual_agreement:"Acordo entre as partes",employer_with_cause:"Dispensa por justa causa",fixed_term_end:"Término de contrato",indirect_termination:"Rescisão indireta",death:"Falecimento",other:"Outro"};
 const typeLabel:Record<string,string>={earning:"Provento",deduction:"Desconto",employer_charge:"Encargo patronal",information:"Informativo"};
@@ -50,13 +51,13 @@ export default function TerminationCalculationMemoryPage(){
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização ativa não encontrada.");setLoading(false);return;}
   setOrg(membership.organization_id);
-  const {data:caseData,error:caseError}=await s.from("payroll_termination_cases").select("id,employee_id,termination_date,termination_reason,notice_type,case_status,calculation_status").eq("organization_id",membership.organization_id).neq("case_status","cancelled").order("termination_date",{ascending:false});
+  const {data:caseData,error:caseError}=await s.from("payroll_termination_cases").select("id,employee_id,termination_date,termination_reason,notice_type,projected_notice_end_date,case_status,calculation_status").eq("organization_id",membership.organization_id).neq("case_status","cancelled").order("termination_date",{ascending:false});
   if(caseError){setError(caseError.message);setLoading(false);return;}
   const rows=(caseData||[]) as CaseRow[];
   setCases(rows);
   const employeeIds=[...new Set(rows.map(x=>x.employee_id))];
   if(employeeIds.length){
-   const {data:employeeData,error:employeeError}=await s.from("employees").select("id,employee_code,full_name").eq("organization_id",membership.organization_id).in("id",employeeIds);
+   const {data:employeeData,error:employeeError}=await s.from("employees").select("id,employee_code,full_name,admission_date").eq("organization_id",membership.organization_id).in("id",employeeIds);
    if(employeeError){setError(employeeError.message);setLoading(false);return;}
    setEmployees(Object.fromEntries(((employeeData||[]) as Employee[]).map(x=>[x.id,x])));
   }else setEmployees({});
@@ -115,6 +116,7 @@ export default function TerminationCalculationMemoryPage(){
     {selected&&<><TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/><TerminationRubricGuide reason={selected.termination_reason} noticeType={selected.notice_type}/></>}
     {selected&&<TerminationPreliminaryCalculator organizationId={org} terminationCaseId={selected.id} userId={userId} reason={selected.termination_reason} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationAcquiredVacationCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} terminationDate={selected.termination_date} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
+    {selected&&<TerminationThirteenthCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} admissionDate={employees[selected.employee_id]?.admission_date||null} terminationDate={selected.termination_date} projectedNoticeEndDate={selected.projected_notice_end_date} reason={selected.termination_reason} noticeType={selected.notice_type} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     <div className="employee-stats payroll-stats"><div><span>Proventos preliminares</span><b>{money(totals.earnings)}</b></div><div><span>Descontos preliminares</span><b>{money(totals.deductions)}</b></div><div><span>Líquido preliminar</span><b>{money(totals.earnings-totals.deductions)}</b></div><div><span>Encargos patronais informados</span><b>{money(totals.charges)}</b></div></div>
     <div className="payroll-create"><div><div className="form-kicker">NOVO ITEM</div><h2>Adicionar verba ou informação</h2><p>O valor será gravado exatamente como informado, sem aplicação automática de alíquota ou fórmula.</p></div>
      <form onSubmit={addItem}>
