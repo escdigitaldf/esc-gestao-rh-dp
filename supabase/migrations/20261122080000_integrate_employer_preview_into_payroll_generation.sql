@@ -228,3 +228,38 @@ $function$;
 
 revoke all on function public.create_payroll_run_atomic(uuid,jsonb,jsonb,jsonb) from public, anon;
 grant execute on function public.create_payroll_run_atomic(uuid,jsonb,jsonb,jsonb) to authenticated;
+
+
+-- A folha não pode ser encerrada sem uma prévia patronal válida e sem bloqueios.
+-- A regra fica no banco para não depender apenas da validação da interface.
+create or replace function public.require_valid_employer_preview_before_payroll_close()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $guard$
+begin
+  if new.status = 'closed' and old.status is distinct from 'closed' then
+    if not exists (
+      select 1
+      from public.payroll_employer_charge_previews p
+      where p.organization_id = new.organization_id
+        and p.payroll_run_id = new.id
+        and p.status = 'preview'
+        and p.blocked_count = 0
+    ) then
+      raise exception 'Não é possível fechar a folha: a prévia de encargos patronais está ausente ou bloqueada. Regularize lotações e incidências e gere uma nova prévia antes do fechamento.';
+    end if;
+  end if;
+  return new;
+end;
+$guard$;
+
+drop trigger if exists payroll_run_require_valid_employer_preview on public.payroll_runs;
+create trigger payroll_run_require_valid_employer_preview
+before update of status on public.payroll_runs
+for each row
+when (new.status = 'closed' and old.status is distinct from 'closed')
+execute function public.require_valid_employer_preview_before_payroll_close();
+
+revoke all on function public.require_valid_employer_preview_before_payroll_close() from public, anon, authenticated;
