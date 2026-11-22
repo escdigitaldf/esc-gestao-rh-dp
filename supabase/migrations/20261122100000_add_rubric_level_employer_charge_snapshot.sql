@@ -71,6 +71,7 @@ select
   s.item->>'simples_annex' as simples_annex,
   nullif(s.item->>'fap_year','')::integer as fap_year,
   nullif(s.item->>'fap_factor','')::numeric as fap_factor,
+  nullif(s.item->>'annex_iv_factor','')::numeric as annex_iv_factor,
   s.item->>'status' as employee_calculation_status,
   s.item->>'issue' as blocking_issue,
   s.item->'normative_sources' as normative_sources,
