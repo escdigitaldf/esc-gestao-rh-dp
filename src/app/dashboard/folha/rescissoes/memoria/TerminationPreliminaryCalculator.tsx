@@ -38,10 +38,10 @@ export default function TerminationPreliminaryCalculator({
   const avos = Number(vacationAvos);
 
   const salaryValid = salaryBase !== "" && Number.isFinite(salary) && salary > 0
-    && salaryDays !== "" && Number.isInteger(days) && days >= 0 && days <= 30
+    && salaryDays !== "" && Number.isInteger(days) && days >= 1 && days <= 30
     && Number.isFinite(divisor) && divisor > 0 && salaryConfirmed;
   const vacationValid = vacationBase !== "" && Number.isFinite(vacBase) && vacBase > 0
-    && vacationAvos !== "" && Number.isInteger(avos) && avos >= 1 && avos <= 12
+    && vacationAvos !== "" && Number.isInteger(avos) && avos >= 1 && avos <= 11
     && vacationConfirmed && vacationEligible && reason !== "employer_with_cause";
 
   const salaryAmount = useMemo(
@@ -180,7 +180,7 @@ export default function TerminationPreliminaryCalculator({
           <h3>Saldo de salário</h3>
           <label>Remuneração mensal considerada (R$)<input type="number" min="0" step="0.01" value={salaryBase} onChange={e=>setSalaryBase(e.target.value)} placeholder="Valor histórico confirmado"/></label>
           <div className="form-two">
-            <label>Dias devidos no mês<input type="number" min="0" max="30" step="1" value={salaryDays} onChange={e=>setSalaryDays(e.target.value)} placeholder="0 a 30"/></label>
+            <label>Dias devidos no mês<input type="number" min="1" max="30" step="1" value={salaryDays} onChange={e=>setSalaryDays(e.target.value)} placeholder="1 a 30"/></label>
             <label>Divisor<input type="number" min="1" step="0.01" value={salaryDivisor} onChange={e=>setSalaryDivisor(e.target.value)}/></label>
           </div>
           <label className="dependent-privacy"><input type="checkbox" checked={salaryConfirmed} onChange={e=>setSalaryConfirmed(e.target.checked)}/> Confirmo que remuneração, divisor e dias devidos foram conferidos em documentos e regras aplicáveis.</label>
@@ -192,7 +192,7 @@ export default function TerminationPreliminaryCalculator({
             <div className="dependent-privacy"><ShieldAlert size={17}/><span>Pré-cálculo bloqueado para justa causa. Exige enquadramento jurídico específico antes de qualquer lançamento automático.</span></div>
           ) : <>
             <label>Remuneração-base das férias (R$)<input type="number" min="0" step="0.01" value={vacationBase} onChange={e=>setVacationBase(e.target.value)} placeholder="Base histórica confirmada"/></label>
-            <label>Avos proporcionais confirmados (1 a 12)<input type="number" min="1" max="12" step="1" value={vacationAvos} onChange={e=>setVacationAvos(e.target.value)} placeholder="Informar após conferência"/></label>
+            <label>Avos proporcionais confirmados (1 a 11)<input type="number" min="1" max="11" step="1" value={vacationAvos} onChange={e=>setVacationAvos(e.target.value)} placeholder="Informar após conferência"/></label>
             <label className="dependent-privacy"><input type="checkbox" checked={vacationEligible} onChange={e=>setVacationEligible(e.target.checked)}/> Confirmo que a modalidade e a situação jurídica admitem férias proporcionais neste processo.</label>
             <label className="dependent-privacy"><input type="checkbox" checked={vacationConfirmed} onChange={e=>setVacationConfirmed(e.target.checked)}/> Confirmo que remuneração-base e avos foram apurados e conferidos.</label>
             <p><b>Férias:</b> {vacationAmount===null?"Bloqueado até completar e confirmar os dados":brl(vacationAmount)}</p>
