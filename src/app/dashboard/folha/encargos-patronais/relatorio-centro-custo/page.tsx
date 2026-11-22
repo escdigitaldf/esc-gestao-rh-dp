@@ -50,13 +50,13 @@ export default function EmployerChargeCostCenterReport(){
    const key=row.cost_center||"Não informado";
    const current=result.get(key)||{employees:new Set<string>(),amount:0,blocked:new Set<string>()};
    current.employees.add(row.employee_id);
-   current.amount+=Number(row.calculated_amount||0);
+   current.amount+=Number(row.rubric_calculated_amount||0);
    if(row.employee_calculation_status!=="calculated")current.blocked.add(row.employee_id);
    result.set(key,current);
   }
   return [...result.entries()].map(([costCenter,value])=>({costCenter,employees:value.employees.size,amount:value.amount,blocked:value.blocked.size})).sort((a,b)=>a.costCenter.localeCompare(b.costCenter,"pt-BR"));
  },[details]);
- const total=details.reduce((sum,row)=>sum+Number(row.calculated_amount||0),0);
+ const total=details.reduce((sum,row)=>sum+Number(row.rubric_calculated_amount||0),0);
  if(loading)return <div className="loading-screen">Carregando relatório por centro de custo...</div>;
  return <main className="module-shell">
   <header className="module-top"><a href="/dashboard/folha/encargos-patronais"><ArrowLeft size={16}/> Encargos patronais</a><b><span className="brand-mark">ESC</span> Gestão de RH e DP</b><span>Relatório por centro de custo</span></header>
