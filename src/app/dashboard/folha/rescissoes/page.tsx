@@ -51,7 +51,7 @@ export default function TerminationModulePage(){
   ]);
   if(employeeResult.error||caseResult.error){setError(employeeResult.error?.message||caseResult.error?.message||"Falha ao carregar processos rescisórios.");setLoading(false);return;}
   setEmployees((employeeResult.data||[]) as Employee[]);
-  setCases((caseResult.data||[]) as CaseRow[]);
+  setCases((caseResult.data||[]).map(row=>({...row,employees:Array.isArray(row.employees)?row.employees[0]||null:row.employees})) as CaseRow[]);
   setLoading(false);
  },[router]);
  useEffect(()=>{void load();},[load]);
