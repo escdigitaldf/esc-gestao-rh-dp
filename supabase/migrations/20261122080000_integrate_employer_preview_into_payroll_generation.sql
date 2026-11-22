@@ -263,3 +263,19 @@ when (new.status = 'closed' and old.status is distinct from 'closed')
 execute function public.require_valid_employer_preview_before_payroll_close();
 
 revoke all on function public.require_valid_employer_preview_before_payroll_close() from public, anon, authenticated;
+
+
+-- Capability handshake: the UI must not generate a payroll run until this
+-- database migration is installed, avoiding a half-integrated preview rollout.
+create or replace function public.payroll_employer_preview_integration_status()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $status$
+  select '2026.11.22.1'::text;
+$status$;
+
+revoke all on function public.payroll_employer_preview_integration_status() from public, anon;
+grant execute on function public.payroll_employer_preview_integration_status() to authenticated;
