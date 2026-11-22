@@ -6,7 +6,8 @@ import { ArrowLeft, ClipboardList, Plus, RefreshCw, ShieldCheck, AlertTriangle }
 import { createClient } from "@/lib/supabase/client";
 
 type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; employment_status: string; };
-type ChecklistItem = { key: string; label: string; done: boolean; };\ntype CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; checklist: ChecklistItem[]; employees?: Employee | null; };
+type ChecklistItem = { key: string; label: string; done: boolean; };
+type CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; checklist: ChecklistItem[]; employees?: Employee | null; };
 const reasons: Record<string,string> = {
  employer_without_cause:"Dispensa sem justa causa", employee_resignation:"Pedido de demissão",
  mutual_agreement:"Acordo entre as partes", employer_with_cause:"Dispensa por justa causa",
@@ -33,7 +34,8 @@ export default function TerminationModulePage(){
  const [lastWorked,setLastWorked]=useState("");
  const [terminationDate,setTerminationDate]=useState("");
  const [deadline,setDeadline]=useState("");
- const [notes,setNotes]=useState("");\n const [expandedCase,setExpandedCase]=useState("");
+ const [notes,setNotes]=useState("");
+ const [expandedCase,setExpandedCase]=useState("");
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
