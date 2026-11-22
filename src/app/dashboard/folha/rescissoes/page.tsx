@@ -6,7 +6,7 @@ import { ArrowLeft, ClipboardList, Plus, RefreshCw, ShieldCheck, AlertTriangle }
 import { createClient } from "@/lib/supabase/client";
 
 type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; employment_status: string; };
-type CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; employees?: Employee | null; };
+type ChecklistItem = { key: string; label: string; done: boolean; };\ntype CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; checklist: ChecklistItem[]; employees?: Employee | null; };
 const reasons: Record<string,string> = {
  employer_without_cause:"Dispensa sem justa causa", employee_resignation:"Pedido de demissão",
  mutual_agreement:"Acordo entre as partes", employer_with_cause:"Dispensa por justa causa",
@@ -33,7 +33,7 @@ export default function TerminationModulePage(){
  const [lastWorked,setLastWorked]=useState("");
  const [terminationDate,setTerminationDate]=useState("");
  const [deadline,setDeadline]=useState("");
- const [notes,setNotes]=useState("");
+ const [notes,setNotes]=useState("");\n const [expandedCase,setExpandedCase]=useState("");
 
  const load=useCallback(async()=>{
   setLoading(true);setError("");
@@ -89,6 +89,16 @@ export default function TerminationModulePage(){
   setSaving(false);
  }
 
+ async function toggleChecklist(row:CaseRow,itemKey:string,done:boolean){
+  setError("");setSuccess("");setSaving(true);
+  const checklist=(row.checklist||[]).map(item=>item.key===itemKey?{...item,done}:item);
+  const {error:updateError}=await createClient().from("payroll_termination_cases").update({
+   checklist,updated_by:(await createClient().auth.getUser()).data.user?.id
+  }).eq("id",row.id).eq("organization_id",org);
+  if(updateError)setError(updateError.message);else{setSuccess("Checklist atualizado e registrado na trilha de auditoria.");await load();}
+  setSaving(false);
+ }
+
  async function updateStatus(row:CaseRow,next:string){
   setError("");setSuccess("");
   if(next==="ready_for_validation"&&row.calculation_status!=="validated"){
@@ -130,7 +140,7 @@ export default function TerminationModulePage(){
     <div className="employee-list-head"><div><h2>Processos de desligamento</h2><p>Registro histórico, status e pendências por colaborador.</p></div><button className="employee-secondary" onClick={()=>void load()} disabled={saving}><RefreshCw size={14}/> Atualizar</button></div>
     {!cases.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum processo rescisório cadastrado.</b><p>Abra o primeiro processo para iniciar o controle.</p></div>:
      <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Desligamento</th><th>Aviso</th><th>Pagamento previsto</th><th>Processo</th><th>Cálculo</th><th>Ação</th></tr></thead><tbody>
-      {cases.map(row=><tr key={row.id}><td><b>{row.employees?.full_name||"Colaborador"}</b><br/><small>{row.employees?.employee_code||"—"}</small></td><td>{reasons[row.termination_reason]||row.termination_reason}</td><td>{brDate(row.termination_date)}</td><td>{noticeLabel[row.notice_type]||row.notice_type}</td><td>{brDate(row.payment_deadline)}</td><td><span className="status-pill">{statusLabel[row.case_status]||row.case_status}</span></td><td>{row.calculation_status==="validated"?"Validado":row.calculation_status==="blocked_missing_data"?"Bloqueado":"Pendente de revisão"}</td><td>{row.case_status==="draft"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"in_review")}>Enviar à conferência</button>:row.case_status==="in_review"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"draft")}>Voltar ao rascunho</button>:<span>—</span>}</td></tr>)}
+      {cases.map(row=><tr key={row.id}><td><b>{row.employees?.full_name||"Colaborador"}</b><br/><small>{row.employees?.employee_code||"—"}</small></td><td>{reasons[row.termination_reason]||row.termination_reason}</td><td>{brDate(row.termination_date)}</td><td>{noticeLabel[row.notice_type]||row.notice_type}</td><td>{brDate(row.payment_deadline)}</td><td><span className="status-pill">{statusLabel[row.case_status]||row.case_status}</span></td><td>{row.calculation_status==="validated"?"Validado":row.calculation_status==="blocked_missing_data"?"Bloqueado":"Pendente de revisão"}</td><td><div className="payroll-detail-actions"><button className="employee-secondary" disabled={saving} onClick={()=>setExpandedCase(expandedCase===row.id?"":row.id)}>Checklist</button>{row.case_status==="draft"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"in_review")}>Enviar à conferência</button>:row.case_status==="in_review"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"draft")}>Voltar ao rascunho</button>:<span>—</span>}</div></td></tr>{expandedCase===row.id&&<tr key={row.id+"-checklist"}><td colSpan={8}><div className="dependent-privacy"><ClipboardList size={16}/><b>Checklist de conferência — {row.employees?.full_name||"Colaborador"}</b></div><div className="form-two">{(row.checklist||[]).map(item=><label key={item.key} className="dependent-privacy"><input type="checkbox" checked={!!item.done} disabled={saving||row.case_status==="cancelled"} onChange={e=>void toggleChecklist(row,item.key,e.target.checked)}/>{item.label}</label>)}</div><small>O checklist organiza a revisão; marcar todos os itens não valida automaticamente os cálculos nem libera o desligamento.</small></td></tr>})}
      </tbody></table></div>}
    </div>
   </section>
