@@ -6,7 +6,7 @@ import {ArrowLeft,RefreshCw,FileBarChart2,ShieldCheck,AlertTriangle} from "lucid
 import {createClient} from "@/lib/supabase/client";
 
 type Preview={id:string;competence:string;status:string;created_at:string;calculation_version:string};
-type Detail={preview_id:string;cost_center:string;employee_id:string;employee_code:string;employee_name:string;lotation_code:string|null;fpas_code:string|null;contribution_key:string;contribution_label:string;calculation_base:number;applied_rate:number;calculated_amount:number;employee_calculation_status:string;blocking_issue:string|null};
+type Detail={preview_id:string;cost_center:string;employee_id:string;employee_code:string;employee_name:string;lotation_code:string|null;fpas_code:string|null;contribution_key:string;contribution_label:string;calculation_base:number;applied_rate:number;rubric_code:string;rubric_description:string;rubric_amount:number;rubric_calculated_amount:number;employee_calculation_status:string;blocking_issue:string|null;normative_sources:Record<string,string|null>|null;fap_factor:number|null};
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const percent=(v:number)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:5})+"%";
 export default function EmployerChargeCostCenterReport(){
@@ -36,7 +36,7 @@ export default function EmployerChargeCostCenterReport(){
   let active=true;
   (async()=>{
    const s=createClient();
-   const {data,error:e}=await s.from("payroll_employer_charge_preview_details").select("*").eq("organization_id",org).eq("preview_id",selected).order("cost_center").order("employee_code");
+   const {data,error:e}=await s.from("payroll_employer_charge_preview_rubric_details").select("*").eq("organization_id",org).eq("preview_id",selected).order("cost_center").order("employee_code").order("rubric_code").order("contribution_key");
    if(!active)return;
    if(e){setError(e.message);setDetails([]);return;}
    setDetails((data||[]) as Detail[]);
@@ -75,7 +75,7 @@ export default function EmployerChargeCostCenterReport(){
      <div className="table-scroll"><table className="employee-table"><thead><tr><th>Centro de custo</th><th>Colaboradores</th><th>Com bloqueio</th><th>Total da prévia</th></tr></thead><tbody>{totals.map(row=><tr key={row.costCenter}><td><b>{row.costCenter}</b></td><td>{row.employees}</td><td>{row.blocked}</td><td>{money(row.amount)}</td></tr>)}{!totals.length&&<tr><td colSpan={4}>Nenhum detalhe encontrado nesta prévia.</td></tr>}</tbody><tfoot><tr><th>Total</th><th>{new Set(details.map(r=>r.employee_id)).size}</th><th>{new Set(details.filter(r=>r.employee_calculation_status!=="calculated").map(r=>r.employee_id)).size}</th><th>{money(total)}</th></tr></tfoot></table></div>
     </div>
     <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Memória por colaborador e encargo</h2><p>Base de cálculo, alíquota efetiva e valor calculado conforme o snapshot da prévia.</p></div></div>
-     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Centro de custo</th><th>Colaborador</th><th>Lotação / FPAS</th><th>Encargo</th><th>Base</th><th>Alíquota</th><th>Valor</th><th>Status</th></tr></thead><tbody>{details.map((r,i)=><tr key={r.employee_id+"-"+r.contribution_key+"-"+i}><td>{r.cost_center||"Não informado"}</td><td><b>{r.employee_name}</b><br/><small>{r.employee_code}</small></td><td>{r.lotation_code||"—"} / {r.fpas_code||"—"}</td><td>{r.contribution_label}</td><td>{money(Number(r.calculation_base))}</td><td>{percent(Number(r.applied_rate))}</td><td>{money(Number(r.calculated_amount))}</td><td><span className={r.employee_calculation_status==="calculated"?"dependent-active":"dependent-inactive"}>{r.employee_calculation_status==="calculated"?"Calculado":"Bloqueado"}</span>{r.blocking_issue&&<small>{r.blocking_issue}</small>}</td></tr>)}</tbody></table></div>
+     <div className="table-scroll"><table className="employee-table"><thead><tr><th>Centro de custo</th><th>Colaborador</th><th>Rubrica</th><th>Lotação / FPAS</th><th>Encargo</th><th>Base da rubrica</th><th>Alíquota</th><th>Valor da rubrica</th><th>Fundamento / FAP</th><th>Status</th></tr></thead><tbody>{details.map((r,i)=><tr key={r.employee_id+"-"+r.contribution_key+"-"+i}><td>{r.cost_center||"Não informado"}</td><td><b>{r.employee_name}</b><br/><small>{r.employee_code}</small></td><td><b>{r.rubric_code}</b><br/><small>{r.rubric_description}</small></td><td>{r.lotation_code||"—"} / {r.fpas_code||"—"}</td><td>{r.contribution_label}</td><td>{money(Number(r.calculation_base))}</td><td>{percent(Number(r.applied_rate))}</td><td>{money(Number(r.rubric_calculated_amount))}</td><td><small>FAP: {r.fap_factor??"—"}<br/>INSS: {r.normative_sources?.employer_inss||"—"}<br/>RAT: {r.normative_sources?.rat_cnae||"—"}<br/>FAP: {r.normative_sources?.fap||"—"}<br/>Terceiros: {r.normative_sources?.third_parties||"—"}</small></td><td><span className={r.employee_calculation_status==="calculated"?"dependent-active":"dependent-inactive"}>{r.employee_calculation_status==="calculated"?"Calculado":"Bloqueado"}</span>{r.blocking_issue&&<small>{r.blocking_issue}</small>}</td></tr>)}</tbody></table></div>
     </div>
    </>}
   </section>
