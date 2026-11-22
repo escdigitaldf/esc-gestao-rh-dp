@@ -102,7 +102,8 @@ cross join lateral (
     ('third_parties'::text,'Terceiros'::text,'affects_third_parties'::text,'third_parties'::text),
     ('payroll_pis'::text,'PIS sobre folha'::text,'affects_payroll_pis'::text,'payroll_pis'::text)
 ) as c(contribution_key,contribution_label,incidence_key,rate_key)
-where coalesce((r.item->>c.incidence_key)::boolean,false);
+where lower(coalesce(r.item->>'item_type',''))='earning'
+  and coalesce((r.item->>c.incidence_key)::boolean,false);
 
 grant select on public.payroll_employer_charge_preview_rubric_details to authenticated;
 
