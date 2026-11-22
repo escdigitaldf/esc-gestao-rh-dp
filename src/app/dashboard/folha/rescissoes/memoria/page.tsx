@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, RefreshCw, ClipboardList, ShieldCheck, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import TerminationCaseDataPanel from "./TerminationCaseDataPanel";
+import TerminationRubricGuide from "./TerminationRubricGuide";
 
-type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; case_status: string; calculation_status: string; };
+type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; notice_type: string; case_status: string; calculation_status: string; };
 type Employee = { id: string; employee_code: string; full_name: string; };
 type ItemRow = { id: string; item_code: string; description: string; item_type: string; reference_period: string | null; reference_quantity: number | null; reference_unit: string | null; calculation_base: number | null; rate: number | null; amount: number; calculation_method: string; calculation_status: string; legal_basis: string | null; review_notes: string | null; };
 const reasonLabel:Record<string,string>={employer_without_cause:"Dispensa sem justa causa",employee_resignation:"Pedido de demissão",mutual_agreement:"Acordo entre as partes",employer_with_cause:"Dispensa por justa causa",fixed_term_end:"Término de contrato",indirect_termination:"Rescisão indireta",death:"Falecimento",other:"Outro"};
@@ -47,7 +48,7 @@ export default function TerminationCalculationMemoryPage(){
   const {data:membership,error:membershipError}=await s.from("organization_memberships").select("organization_id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
   if(membershipError||!membership){setError(membershipError?.message||"Organização ativa não encontrada.");setLoading(false);return;}
   setOrg(membership.organization_id);
-  const {data:caseData,error:caseError}=await s.from("payroll_termination_cases").select("id,employee_id,termination_date,termination_reason,case_status,calculation_status").eq("organization_id",membership.organization_id).neq("case_status","cancelled").order("termination_date",{ascending:false});
+  const {data:caseData,error:caseError}=await s.from("payroll_termination_cases").select("id,employee_id,termination_date,termination_reason,notice_type,case_status,calculation_status").eq("organization_id",membership.organization_id).neq("case_status","cancelled").order("termination_date",{ascending:false});
   if(caseError){setError(caseError.message);setLoading(false);return;}
   const rows=(caseData||[]) as CaseRow[];
   setCases(rows);
@@ -109,7 +110,7 @@ export default function TerminationCalculationMemoryPage(){
    <div className="dependent-privacy"><AlertTriangle size={17}/><span>Antes de validar, confira modalidade, aviso-prévio, projeção, histórico salarial e médias, férias, 13º, FGTS, descontos, normas coletivas e parâmetros vigentes. Itens sem fundamento ou conferência não devem ser tratados como definitivos.</span></div>
    {!cases.length?<div className="employee-empty"><ClipboardList size={25}/><b>Nenhum processo disponível</b><p>Abra um processo rescisório antes de registrar sua memória de cálculo.</p></div>:<>
     <div className="payroll-create"><div><div className="form-kicker">PROCESSO SELECIONADO</div><h2>{selected?employees[selected.employee_id]?.full_name||"Colaborador": "Selecione um processo"}</h2><p>{selected?reasonLabel[selected.termination_reason]+" · Desligamento em "+dateLabel(selected.termination_date):""}</p></div><label>Processo rescisório<select value={selectedCase} onChange={e=>void selectCase(e.target.value)}>{cases.map(x=><option key={x.id} value={x.id}>{employees[x.employee_id]?.employee_code||"—"} — {employees[x.employee_id]?.full_name||"Colaborador"} · {dateLabel(x.termination_date)}</option>)}</select></label></div>
-    {selected&&<TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/>}
+    {selected&&<><TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/><TerminationRubricGuide reason={selected.termination_reason} noticeType={selected.notice_type}/></>}
     <div className="employee-stats payroll-stats"><div><span>Proventos preliminares</span><b>{money(totals.earnings)}</b></div><div><span>Descontos preliminares</span><b>{money(totals.deductions)}</b></div><div><span>Líquido preliminar</span><b>{money(totals.earnings-totals.deductions)}</b></div><div><span>Encargos patronais informados</span><b>{money(totals.charges)}</b></div></div>
     <div className="payroll-create"><div><div className="form-kicker">NOVO ITEM</div><h2>Adicionar verba ou informação</h2><p>O valor será gravado exatamente como informado, sem aplicação automática de alíquota ou fórmula.</p></div>
      <form onSubmit={addItem}>
