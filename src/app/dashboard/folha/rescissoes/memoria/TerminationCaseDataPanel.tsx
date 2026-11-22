@@ -33,20 +33,20 @@ export default function TerminationCaseDataPanel({organizationId,employeeId,term
  const salaryAtDate=history.find(x=>x.effective_from<=terminationDate&&(!x.effective_to||x.effective_to>=terminationDate));
  const warnings:string[]=[];
  if(!base?.admission_date)warnings.push("Data de admissão não cadastrada.");
- if(!salaryAtDate&&!base?.salary_amount)warnings.push("Não há salário cadastrado vigente na data do desligamento.");
+ if(!salaryAtDate)warnings.push("Não há faixa do histórico salarial que comprove o salário vigente na data do desligamento.");
  if(!history.length)warnings.push("Histórico salarial não localizado; conferir cadastro e documentos contratuais.");
  if(base?.salary_type&&base.salary_type!=="monthly")warnings.push("Tipo salarial diferente de mensal; médias e critérios específicos precisam de revisão.");
  return <section className="payroll-create">
   <div><div className="form-kicker">CONFERÊNCIA PRELIMINAR</div><h2>Dados contratuais e histórico salarial</h2><p>Informações consultadas no cadastro e no histórico até a data do desligamento. Nenhuma verba é calculada nesta etapa.</p></div>
   <div className="employee-stats payroll-stats">
    <div><span>Admissão</span><b>{date(base?.admission_date||null)}</b></div>
-   <div><span>Salário vigente identificado</span><b>{salaryAtDate?brl(Number(salaryAtDate.salary_amount)):base?.salary_amount?brl(Number(base.salary_amount)):"Não identificado"}</b></div>
-   <div><span>Tipo salarial</span><b>{salaryAtDate?.salary_type||base?.salary_type||"Não informado"}</b></div>
+   <div><span>Salário comprovado na data</span><b>{salaryAtDate?brl(Number(salaryAtDate.salary_amount)):"Sem faixa histórica"}</b></div>
+   <div><span>Salário no cadastro atual</span><b>{base?.salary_amount!==null&&base?.salary_amount!==undefined?brl(Number(base.salary_amount)):"Não informado"}</b></div>
    <div><span>Jornada semanal</span><b>{base?.weekly_hours?Number(base.weekly_hours)+" horas":"Não informada"}</b></div>
   </div>
   {warnings.length>0?<div className="dependent-privacy"><AlertTriangle size={17}/><div><b>Pontos que exigem conferência</b><ul>{warnings.map(x=><li key={x}>{x}</li>)}</ul></div></div>:<div className="dependent-privacy"><ShieldCheck size={17}/><span>Dados cadastrais básicos localizados. Ainda é necessária a conferência documental e de médias variáveis.</span></div>}
   <div className="employee-list-head"><div><h3><History size={16}/> Histórico salarial</h3><p>{history.length} alteração(ões) registrada(s) até a data de desligamento.</p></div></div>
   {!history.length?<div className="employee-empty">Sem histórico salarial registrado para este colaborador.</div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Vigência inicial</th><th>Vigência final</th><th>Salário</th><th>Tipo</th><th>Motivo</th><th>Vigente no desligamento</th></tr></thead><tbody>{history.map(x=><tr key={x.id}><td>{date(x.effective_from)}</td><td>{date(x.effective_to)}</td><td><b>{brl(Number(x.salary_amount))}</b></td><td>{x.salary_type}</td><td>{x.change_reason||"—"}</td><td>{salaryAtDate?.id===x.id?"Sim":"—"}</td></tr>)}</tbody></table></div>}
-  <div className="dependent-privacy"><CalendarClock size={16}/><span>Base salarial apresentada para conferência. Não substitui a remuneração composta por médias, adicionais, comissões, variáveis, reajustes retroativos ou previsões de norma coletiva.</span></div>
+  <div className="dependent-privacy"><CalendarClock size={16}/><span>O salário cadastral atual não é tratado como salário histórico. A remuneração da data só é considerada identificada quando existe faixa de vigência compatível no histórico. Médias, adicionais, comissões, variáveis, reajustes retroativos e normas coletivas exigem conferência própria.</span></div>
  </section>;
 }
