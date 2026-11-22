@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, RefreshCw, ClipboardList, ShieldCheck, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import TerminationCaseDataPanel from "./TerminationCaseDataPanel";
 
 type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; case_status: string; calculation_status: string; };
 type Employee = { id: string; employee_code: string; full_name: string; };
@@ -108,6 +109,7 @@ export default function TerminationCalculationMemoryPage(){
    <div className="dependent-privacy"><AlertTriangle size={17}/><span>Antes de validar, confira modalidade, aviso-prévio, projeção, histórico salarial e médias, férias, 13º, FGTS, descontos, normas coletivas e parâmetros vigentes. Itens sem fundamento ou conferência não devem ser tratados como definitivos.</span></div>
    {!cases.length?<div className="employee-empty"><ClipboardList size={25}/><b>Nenhum processo disponível</b><p>Abra um processo rescisório antes de registrar sua memória de cálculo.</p></div>:<>
     <div className="payroll-create"><div><div className="form-kicker">PROCESSO SELECIONADO</div><h2>{selected?employees[selected.employee_id]?.full_name||"Colaborador": "Selecione um processo"}</h2><p>{selected?reasonLabel[selected.termination_reason]+" · Desligamento em "+dateLabel(selected.termination_date):""}</p></div><label>Processo rescisório<select value={selectedCase} onChange={e=>void selectCase(e.target.value)}>{cases.map(x=><option key={x.id} value={x.id}>{employees[x.employee_id]?.employee_code||"—"} — {employees[x.employee_id]?.full_name||"Colaborador"} · {dateLabel(x.termination_date)}</option>)}</select></label></div>
+    {selected&&<TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/>}
     <div className="employee-stats payroll-stats"><div><span>Proventos preliminares</span><b>{money(totals.earnings)}</b></div><div><span>Descontos preliminares</span><b>{money(totals.deductions)}</b></div><div><span>Líquido preliminar</span><b>{money(totals.earnings-totals.deductions)}</b></div><div><span>Encargos patronais informados</span><b>{money(totals.charges)}</b></div></div>
     <div className="payroll-create"><div><div className="form-kicker">NOVO ITEM</div><h2>Adicionar verba ou informação</h2><p>O valor será gravado exatamente como informado, sem aplicação automática de alíquota ou fórmula.</p></div>
      <form onSubmit={addItem}>
