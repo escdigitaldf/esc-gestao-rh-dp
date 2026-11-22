@@ -52,6 +52,7 @@ using (exists (
   where m.organization_id = payroll_termination_cases.organization_id
     and m.user_id = (select auth.uid())
     and m.status = 'active'
+    and m.role = any(array['owner','admin','hr_manager','payroll'])
 ));
 
 drop policy if exists payroll_termination_cases_insert on public.payroll_termination_cases;
