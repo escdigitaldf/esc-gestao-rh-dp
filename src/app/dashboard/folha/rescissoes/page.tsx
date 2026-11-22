@@ -47,7 +47,7 @@ export default function TerminationModulePage(){
   setOrg(membership.organization_id);
   const [employeeResult,caseResult]=await Promise.all([
    s.from("employees").select("id,employee_code,full_name,admission_date,employment_status").eq("organization_id",membership.organization_id).eq("employment_status","active").order("full_name"),
-   s.from("payroll_termination_cases").select("id,employee_id,termination_reason,notice_type,termination_date,payment_deadline,case_status,calculation_status,notes,employees(id,employee_code,full_name,admission_date,employment_status)").eq("organization_id",membership.organization_id).order("termination_date",{ascending:false})
+   s.from("payroll_termination_cases").select("id,employee_id,termination_reason,notice_type,termination_date,payment_deadline,case_status,calculation_status,notes,checklist,employees(id,employee_code,full_name,admission_date,employment_status)").eq("organization_id",membership.organization_id).order("termination_date",{ascending:false})
   ]);
   if(employeeResult.error||caseResult.error){setError(employeeResult.error?.message||caseResult.error?.message||"Falha ao carregar processos rescisórios.");setLoading(false);return;}
   setEmployees((employeeResult.data||[]) as Employee[]);
