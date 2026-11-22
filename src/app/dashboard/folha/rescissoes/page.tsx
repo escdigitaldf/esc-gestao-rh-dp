@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; employment_status: string; };
 type ChecklistItem = { key: string; label: string; done: boolean; };
-type CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; checklist: ChecklistItem[]; employees?: Employee | null; };
+type CaseRow = { id: string; employee_id: string; termination_reason: string; notice_type: string; termination_date: string; payment_deadline: string | null; case_status: string; calculation_status: string; notes: string | null; checklist: ChecklistItem[]; employees?: Employee | Employee[] | null; };
 const reasons: Record<string,string> = {
  employer_without_cause:"Dispensa sem justa causa", employee_resignation:"Pedido de demissão",
  mutual_agreement:"Acordo entre as partes", employer_with_cause:"Dispensa por justa causa",
@@ -17,6 +17,7 @@ const reasons: Record<string,string> = {
 const statusLabel: Record<string,string> = { draft:"Rascunho", in_review:"Em conferência", ready_for_validation:"Aguardando validação", cancelled:"Cancelado" };
 const noticeLabel: Record<string,string> = { worked:"Trabalhado", indemnified:"Indenizado", waived:"Dispensado", not_applicable:"Não aplicável", pending_review:"A definir" };
 const brDate=(value:string|null)=>value?new Date(value+"T12:00:00").toLocaleDateString("pt-BR"):"—";
+const caseEmployee=(row:CaseRow):Employee|null=>Array.isArray(row.employees)?row.employees[0]||null:row.employees||null;
 
 export default function TerminationModulePage(){
  const router=useRouter();
@@ -51,7 +52,7 @@ export default function TerminationModulePage(){
   ]);
   if(employeeResult.error||caseResult.error){setError(employeeResult.error?.message||caseResult.error?.message||"Falha ao carregar processos rescisórios.");setLoading(false);return;}
   setEmployees((employeeResult.data||[]) as Employee[]);
-  setCases((caseResult.data||[]).map(row=>({...row,employees:Array.isArray(row.employees)?row.employees[0]||null:row.employees})) as CaseRow[]);
+  setCases((caseResult.data||[]) as CaseRow[]);
   setLoading(false);
  },[router]);
  useEffect(()=>{void load();},[load]);
@@ -142,7 +143,7 @@ export default function TerminationModulePage(){
     <div className="employee-list-head"><div><h2>Processos de desligamento</h2><p>Registro histórico, status e pendências por colaborador.</p></div><button className="employee-secondary" onClick={()=>void load()} disabled={saving}><RefreshCw size={14}/> Atualizar</button></div>
     {!cases.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum processo rescisório cadastrado.</b><p>Abra o primeiro processo para iniciar o controle.</p></div>:
      <div className="table-scroll"><table className="employee-table"><thead><tr><th>Colaborador</th><th>Motivo</th><th>Desligamento</th><th>Aviso</th><th>Pagamento previsto</th><th>Processo</th><th>Cálculo</th><th>Ação</th></tr></thead><tbody>
-      {cases.map(row=><><tr key={row.id}><td><b>{row.employees?.full_name||"Colaborador"}</b><br/><small>{row.employees?.employee_code||"—"}</small></td><td>{reasons[row.termination_reason]||row.termination_reason}</td><td>{brDate(row.termination_date)}</td><td>{noticeLabel[row.notice_type]||row.notice_type}</td><td>{brDate(row.payment_deadline)}</td><td><span className="status-pill">{statusLabel[row.case_status]||row.case_status}</span></td><td>{row.calculation_status==="validated"?"Validado":row.calculation_status==="blocked_missing_data"?"Bloqueado":"Pendente de revisão"}</td><td><div className="payroll-detail-actions"><button className="employee-secondary" disabled={saving} onClick={()=>setExpandedCase(expandedCase===row.id?"":row.id)}>Checklist</button>{row.case_status==="draft"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"in_review")}>Enviar à conferência</button>:row.case_status==="in_review"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"draft")}>Voltar ao rascunho</button>:<span>—</span>}</div></td></tr>{expandedCase===row.id&&<tr key={row.id+"-checklist"}><td colSpan={8}><div className="dependent-privacy"><ClipboardList size={16}/><b>Checklist de conferência — {row.employees?.full_name||"Colaborador"}</b></div><div className="form-two">{(row.checklist||[]).map(item=><label key={item.key} className="dependent-privacy"><input type="checkbox" checked={!!item.done} disabled={saving||row.case_status==="cancelled"} onChange={e=>void toggleChecklist(row,item.key,e.target.checked)}/>{item.label}</label>)}</div><small>O checklist organiza a revisão; marcar todos os itens não valida automaticamente os cálculos nem libera o desligamento.</small></td></tr>}</>)}
+      {cases.map(row=><><tr key={row.id}><td><b>{caseEmployee(row)?.full_name||"Colaborador"}</b><br/><small>{caseEmployee(row)?.employee_code||"—"}</small></td><td>{reasons[row.termination_reason]||row.termination_reason}</td><td>{brDate(row.termination_date)}</td><td>{noticeLabel[row.notice_type]||row.notice_type}</td><td>{brDate(row.payment_deadline)}</td><td><span className="status-pill">{statusLabel[row.case_status]||row.case_status}</span></td><td>{row.calculation_status==="validated"?"Validado":row.calculation_status==="blocked_missing_data"?"Bloqueado":"Pendente de revisão"}</td><td><div className="payroll-detail-actions"><button className="employee-secondary" disabled={saving} onClick={()=>setExpandedCase(expandedCase===row.id?"":row.id)}>Checklist</button>{row.case_status==="draft"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"in_review")}>Enviar à conferência</button>:row.case_status==="in_review"?<button className="employee-secondary" disabled={saving} onClick={()=>void updateStatus(row,"draft")}>Voltar ao rascunho</button>:<span>—</span>}</div></td></tr>{expandedCase===row.id&&<tr key={row.id+"-checklist"}><td colSpan={8}><div className="dependent-privacy"><ClipboardList size={16}/><b>Checklist de conferência — {row.employees?.full_name||"Colaborador"}</b></div><div className="form-two">{(row.checklist||[]).map(item=><label key={item.key} className="dependent-privacy"><input type="checkbox" checked={!!item.done} disabled={saving||row.case_status==="cancelled"} onChange={e=>void toggleChecklist(row,item.key,e.target.checked)}/>{item.label}</label>)}</div><small>O checklist organiza a revisão; marcar todos os itens não valida automaticamente os cálculos nem libera o desligamento.</small></td></tr>}</>)}
      </tbody></table></div>}
    </div>
   </section>
