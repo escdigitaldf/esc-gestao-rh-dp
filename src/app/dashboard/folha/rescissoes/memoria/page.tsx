@@ -9,6 +9,7 @@ import TerminationRubricGuide from "./TerminationRubricGuide";
 import TerminationPreliminaryCalculator from "./TerminationPreliminaryCalculator";
 import TerminationAcquiredVacationCalculator from "./TerminationAcquiredVacationCalculator";
 import TerminationThirteenthCalculator from "./TerminationThirteenthCalculator";
+import TerminationRemunerationEvidence from "./TerminationRemunerationEvidence";
 
 type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; notice_type: string; projected_notice_end_date: string | null; case_status: string; calculation_status: string; };
 type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; };
@@ -114,6 +115,7 @@ export default function TerminationCalculationMemoryPage(){
    {!cases.length?<div className="employee-empty"><ClipboardList size={25}/><b>Nenhum processo disponível</b><p>Abra um processo rescisório antes de registrar sua memória de cálculo.</p></div>:<>
     <div className="payroll-create"><div><div className="form-kicker">PROCESSO SELECIONADO</div><h2>{selected?employees[selected.employee_id]?.full_name||"Colaborador": "Selecione um processo"}</h2><p>{selected?reasonLabel[selected.termination_reason]+" · Desligamento em "+dateLabel(selected.termination_date):""}</p></div><label>Processo rescisório<select value={selectedCase} onChange={e=>void selectCase(e.target.value)}>{cases.map(x=><option key={x.id} value={x.id}>{employees[x.employee_id]?.employee_code||"—"} — {employees[x.employee_id]?.full_name||"Colaborador"} · {dateLabel(x.termination_date)}</option>)}</select></label></div>
     {selected&&<><TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/><TerminationRubricGuide reason={selected.termination_reason} noticeType={selected.notice_type}/></>}
+    {selected&&<TerminationRemunerationEvidence organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/>}
     {selected&&<TerminationPreliminaryCalculator organizationId={org} terminationCaseId={selected.id} userId={userId} reason={selected.termination_reason} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationAcquiredVacationCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} terminationDate={selected.termination_date} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationThirteenthCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} admissionDate={employees[selected.employee_id]?.admission_date||null} terminationDate={selected.termination_date} projectedNoticeEndDate={selected.projected_notice_end_date} reason={selected.termination_reason} noticeType={selected.notice_type} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
