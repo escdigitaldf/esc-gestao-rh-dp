@@ -242,11 +242,16 @@ begin
   if new.status = 'closed' and old.status is distinct from 'closed' then
     if not exists (
       select 1
-      from public.payroll_employer_charge_previews p
-      where p.organization_id = new.organization_id
-        and p.payroll_run_id = new.id
-        and p.status = 'preview'
-        and p.blocked_count = 0
+      from (
+        select p.status, p.blocked_count
+        from public.payroll_employer_charge_previews p
+        where p.organization_id = new.organization_id
+          and p.payroll_run_id = new.id
+        order by p.created_at desc, p.id desc
+        limit 1
+      ) latest_preview
+      where latest_preview.status = 'preview'
+        and latest_preview.blocked_count = 0
     ) then
       raise exception 'Não é possível fechar a folha: a prévia de encargos patronais está ausente ou bloqueada. Regularize lotações e incidências e gere uma nova prévia antes do fechamento.';
     end if;
