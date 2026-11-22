@@ -86,10 +86,11 @@ select
   coalesce(nullif(s.item->'rates'->>c.rate_key,'')::numeric,0) as applied_rate,
   case when coalesce((r.item->>c.incidence_key)::boolean,false)
        then coalesce(nullif(r.item->>'amount','')::numeric,0) else 0 end as calculation_base,
-  case when coalesce((r.item->>c.incidence_key)::boolean,false)
+  case when s.item->>'status'='calculated'
+         and coalesce((r.item->>c.incidence_key)::boolean,false)
        then round(coalesce(nullif(r.item->>'amount','')::numeric,0)
          * coalesce(nullif(s.item->'rates'->>c.rate_key,'')::numeric,0) / 100,2)
-       else 0 end as rubric_calculated_amount,
+       else null end as rubric_calculated_amount,
   r.item->>'source_parameter_table_id' as source_parameter_table_id,
   r.item->>'payroll_variable_event_id' as payroll_variable_event_id,
   coalesce((r.item->>c.incidence_key)::boolean,false) as incidence_applied
