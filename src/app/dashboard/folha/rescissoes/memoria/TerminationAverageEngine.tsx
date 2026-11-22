@@ -17,10 +17,14 @@ type EventRow = {
   variable_event_id: string; competence_month: string; code: string;
   description: string; event_amount: number; event_status: string;
   reconciliation_status: string; rubric_id: string | null;
+  rubric_incidence_mismatch: boolean | null; item_dsr_mismatch: boolean | null;
+  event_composition_difference: number | null; payroll_item_count: number | null;
+  event_affects_dsr: boolean | null; rubric_affects_dsr: boolean | null;
 };
 type RubricRow = {
   id: string; code: string; description: string; item_type: string;
-  affects_13th: boolean; affects_vacation: boolean;
+  affects_13th: boolean; affects_vacation: boolean; affects_dsr: boolean;
+  dsr_category: string; active: boolean;
 };
 type Evidence = { month: string; amount: number; count: number };
 type AverageKind = "thirteenth" | "vacation" | "notice" | "commission" | "overtime" | "additional" | "dsr";
@@ -43,6 +47,8 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export default function TerminationAverageEngine({ organizationId, terminationCaseId, employeeId, terminationDate, userId, existingCodes, onSaved }: Props) {
   const [events, setEvents] = useState<EventRow[]>([]);
+  const [excludedEvents, setExcludedEvents] = useState(0);
+  const [duplicateEvents, setDuplicateEvents] = useState(0);
   const [rubrics, setRubrics] = useState<Record<string, RubricRow>>({});
   const [kind, setKind] = useState<AverageKind>("thirteenth");
   const [windowMonths, setWindowMonths] = useState("12");
@@ -77,7 +83,7 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
       setLoading(true); setError("");
       const s = createClient();
       const { data, error: queryError } = await s.from("payroll_variable_event_reconciliation")
-        .select("variable_event_id,competence_month,code,description,event_amount,event_status,reconciliation_status,rubric_id")
+        .select("variable_event_id,competence_month,code,description,event_amount,event_status,reconciliation_status,rubric_id,rubric_incidence_mismatch,item_dsr_mismatch,event_composition_difference,payroll_item_count,event_affects_dsr,rubric_affects_dsr")
         .eq("organization_id", organizationId).eq("employee_id", employeeId)
         .eq("event_status", "processed").eq("reconciliation_status", "reconciled")
         .gte("competence_month", periodStart).lte("competence_month", periodEnd)
@@ -89,12 +95,26 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
       let map: Record<string, RubricRow> = {};
       if (ids.length) {
         const { data: rubricData, error: rubricError } = await s.from("payroll_rubrics")
-          .select("id,code,description,item_type,affects_13th,affects_vacation")
+          .select("id,code,description,item_type,affects_13th,affects_vacation,affects_dsr,dsr_category,active")
           .eq("organization_id", organizationId).in("id", ids);
         if (rubricError) { setError(rubricError.message); setLoading(false); return; }
         map = Object.fromEntries(((rubricData || []) as RubricRow[]).map(x => [x.id, x]));
       }
-      setEvents(rows);
+      const cleanRows = rows.filter(row =>
+        row.rubric_incidence_mismatch !== true &&
+        row.item_dsr_mismatch !== true &&
+        Math.abs(Number(row.event_composition_difference || 0)) <= 0.01 &&
+        row.payroll_item_count !== 0
+      );
+      const uniqueRows = new Map<string, EventRow>();
+      let duplicates = 0;
+      for (const row of cleanRows) {
+        if (uniqueRows.has(row.variable_event_id)) { duplicates += 1; continue; }
+        uniqueRows.set(row.variable_event_id, row);
+      }
+      setExcludedEvents(rows.length - cleanRows.length);
+      setDuplicateEvents(duplicates);
+      setEvents([...uniqueRows.values()]);
       setRubrics(map);
       setSelectedRubrics(previous => previous.filter(id => ids.includes(id)));
       setLoading(false);
@@ -105,7 +125,7 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
 
   const selectedKind = kinds.find(x => x.value === kind)!;
   const candidates = useMemo(() => {
-    return Object.values(rubrics).filter(r => r.item_type === "earning" &&
+    return Object.values(rubrics).filter(r => r.active && r.item_type === "earning" &&
       (selectedKind.incidence === "13th" ? r.affects_13th :
        selectedKind.incidence === "vacation" ? r.affects_vacation : true))
       .sort((a, b) => a.code.localeCompare(b.code));
@@ -116,12 +136,16 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
     return { month, amount: matching.reduce((sum, e) => sum + Number(e.event_amount || 0), 0), count: matching.length };
   }), [months, events, selectedRubrics]);
   const total = round2(evidence.reduce((sum, row) => sum + row.amount, 0));
+  const selectedDsrRelated = candidates.filter(r => selectedRubrics.includes(r.id) && r.affects_dsr);
+  const dsrReviewRequired = selectedDsrRelated.length > 0;
+  const dsrReviewConfirmed = !dsrReviewRequired || ruleNotes.toLowerCase().includes("dsr");
+  const hasNoValidEvidence = events.length === 0 || total <= 0;
   const occurrenceMonths = evidence.filter(x => x.count > 0).length;
   const divisor = divisorMode === "calendar" ? Number(windowMonths) :
     divisorMode === "occurrence" ? occurrenceMonths : Number(manualDivisor);
   const average = divisor > 0 ? round2(total / divisor) : 0;
   const code = selectedKind.code + "_" + terminationDate.replaceAll("-", "");
-  const canSave = selectedRubrics.length > 0 && total > 0 && divisor > 0 && confirmed && ruleReference.trim().length > 0;
+  const canSave = selectedRubrics.length > 0 && total > 0 && divisor > 0 && confirmed && ruleReference.trim().length > 0 && dsrReviewConfirmed && !hasNoValidEvidence;
 
   function toggleRubric(id: string) {
     setSelectedRubrics(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
@@ -148,7 +172,7 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
       average_amount: average,
       selected_rubrics: candidates.filter(r => selectedRubrics.includes(r.id)).map(r => ({ id: r.id, code: r.code, description: r.description })),
       monthly_evidence: evidence.map(x => ({ competence: x.month, event_count: x.count, amount: round2(x.amount) })),
-      source_filter: { event_status: "processed", reconciliation_status: "reconciled", rubric_item_type: "earning" },
+      source_filter: { event_status: "processed", reconciliation_status: "reconciled", rubric_item_type: "earning", excluded_incidence_or_dsr_mismatches: excludedEvents, duplicate_event_ids_ignored: duplicateEvents },
       operator_rule_reference: ruleReference.trim(),
       operator_notes: ruleNotes.trim() || null,
       operator_confirmed: true,
@@ -157,7 +181,9 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
         "Resultado é média preliminar e não define automaticamente a remuneração rescisória.",
         "O período, divisor, atualização, habitualidade, DSR e integração dependem da natureza da parcela, legislação vigente e CCT/ACT aplicável.",
         "Eventos pendentes, não processados, rejeitados ou não conciliados foram excluídos.",
-        "Para DSR, confirme que o valor não esteja já incorporado à parcela selecionada."
+        "Para DSR, confirme que o valor não esteja já incorporado à parcela selecionada.",
+        "Eventos com divergência de incidência, DSR ou composição acima de R$ 0,01 foram excluídos da amostra.",
+        "Eventos repetidos pelo mesmo identificador foram contabilizados uma única vez."
       ]
     };
     const { error: insertError } = await createClient().from("payroll_termination_calculation_items").insert({
@@ -189,7 +215,7 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
 
   return <section className="payroll-create">
     <div><div className="form-kicker">MOTOR ASSISTIDO · ETAPA 5</div><h2><Calculator size={18}/> Motor de médias remuneratórias</h2>
-      <p>Apura indicadores preliminares por natureza da verba, com seleção explícita de rubricas, janela e divisor. Nenhuma média é tratada como definitiva.</p></div>
+      <p>Apura indicadores preliminares por natureza da verba, com seleção explícita de rubricas, janela e divisor. A amostra passa por filtros de integridade e conciliação antes de ser registrada.</p></div>
     <div className="form-two">
       <label>Natureza da média<select value={kind} onChange={e => { setKind(e.target.value as AverageKind); setSelectedRubrics([]); setConfirmed(false); }}>
         {kinds.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
@@ -215,6 +241,7 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
           <span><b>{r.code}</b> — {r.description}{r.affects_13th ? " · Incide em 13º" : ""}{r.affects_vacation ? " · Incide em férias" : ""}</span>
         </label>)}</div>}
     </div>
+    <div className="employee-stats payroll-stats"><div><span>Eventos válidos na amostra</span><b>{events.length}</b></div><div><span>Eventos excluídos por divergência</span><b>{excludedEvents}</b></div><div><span>Duplicidades ignoradas</span><b>{duplicateEvents}</b></div><div><span>Rubricas relacionadas ao DSR</span><b>{selectedDsrRelated.length}</b></div></div>
     <div className="employee-list-card payroll-list">
       <div className="employee-list-head"><h3>Composição mensal selecionada</h3><span>Total: <b>{money(total)}</b></span></div>
       <div className="table-scroll"><table className="employee-table"><thead><tr><th>Competência</th><th>Ocorrências</th><th>Total conciliado</th></tr></thead><tbody>
@@ -224,9 +251,12 @@ export default function TerminationAverageEngine({ organizationId, terminationCa
     </div>
     <label>Fundamento legal ou coletivo validado pelo DP<input value={ruleReference} onChange={e => { setRuleReference(e.target.value); setConfirmed(false); }} placeholder="Ex.: CLT, art. 142, § 3º; CCT/ACT, cláusula e vigência"/></label>
     <label>Observações da regra e conferência<textarea rows={2} value={ruleNotes} onChange={e => { setRuleNotes(e.target.value); setConfirmed(false); }} placeholder="Critério da média, atualização, habitualidade, exclusões, DSR e documentos consultados"/></label>
+    {dsrReviewRequired && <div className="notice"><b>Conferência adicional de DSR:</b> {selectedDsrRelated.map(r => r.code).join(", ")} possui incidência relacionada ao repouso. Registre nas observações se o DSR foi calculado em rubrica separada ou já está incorporado, e evite somá-lo duas vezes. A observação deve mencionar expressamente “DSR”.</div>}
+    {excludedEvents > 0 && <div className="dependent-privacy"><ShieldAlert size={17}/><span>{excludedEvents} evento(s) foram excluídos por divergência de incidência, divergência de DSR, composição diferente do lançamento conciliado ou ausência de itens na folha. Revise a conciliação antes de utilizar a amostra.</span></div>}
+    {hasNoValidEvidence && <div className="notice error">Não há eventos válidos suficientes nesta seleção para registrar uma média.</div>}
     <label className="dependent-privacy" style={{ alignItems: "center" }}><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/><span>Confirmo que revisei a seleção de rubricas, o período, o divisor e o fundamento legal/coletivo antes de registrar esta média preliminar.</span></label>
     {error && <div className="notice error">{error}</div>}{success && <div className="notice success">{success}</div>}
-    <div className="dependent-privacy"><ShieldAlert size={17}/><span>O motor não infere a natureza de comissões, horas extras, adicionais ou DSR pelo texto da rubrica. Para essas categorias, a seleção é manual e exige fundamento específico. O divisor “meses com ocorrência” pode distorcer a média quando a norma determina divisor por meses-calendário ou período integral.</span></div>
+    <div className="dependent-privacy"><ShieldAlert size={17}/><span>O motor não infere a natureza de comissões, horas extras, adicionais ou DSR pelo texto da rubrica. Para essas categorias, a seleção é manual e exige fundamento específico. O divisor “meses com ocorrência” pode distorcer a média quando a norma determina divisor por meses-calendário ou período integral. A ausência de eventos em um mês não significa, por si só, que o divisor legal deva ser reduzido.</span></div>
     <button className="employee-primary" type="button" disabled={saving || loading || !canSave} onClick={() => void save()}>{saving ? "Registrando..." : "Registrar média preliminar na memória"}</button>
   </section>;
 }
