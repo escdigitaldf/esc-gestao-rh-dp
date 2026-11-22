@@ -117,7 +117,7 @@ export default function TerminationModulePage(){
  return <main className="module-shell">
   <header className="module-top"><a href="/dashboard/folha"><ArrowLeft size={16}/> Folha de pagamento</a><b><span className="brand-mark">ESC</span> Gestão de RH e DP</b><span>Rescisões</span></header>
   <section className="module-content payroll-content">
-   <div className="module-heading"><div><div className="form-kicker">DEPARTAMENTO PESSOAL · DESLIGAMENTOS</div><h1>Gestão de Rescisões</h1><p>Abertura, conferência documental e acompanhamento dos processos de desligamento.</p></div><a className="employee-secondary" href="/dashboard/folha"><ArrowLeft size={15}/> Voltar à folha</a></div>
+   <div className="module-heading"><div><div className="form-kicker">DEPARTAMENTO PESSOAL · DESLIGAMENTOS</div><h1>Gestão de Rescisões</h1><p>Abertura, conferência documental e acompanhamento dos processos de desligamento.</p></div><div className="payroll-detail-actions"><a className="employee-secondary" href="/dashboard/folha/rescissoes/memoria"><ClipboardList size={15}/> Memória de cálculo</a><a className="employee-secondary" href="/dashboard/folha"><ArrowLeft size={15}/> Voltar à folha</a></div></div>
    {error&&<div className="notice error">{error}</div>}{success&&<div className="notice success">{success}</div>}
    <div className="dependent-privacy"><ShieldCheck size={17}/><span>O processo mantém trilha de auditoria e separa o cadastro do desligamento da efetivação contratual. Não há cálculo automático de verbas nem alteração automática do vínculo do colaborador nesta etapa.</span></div>
    <div className="dependent-privacy"><AlertTriangle size={17}/><span><b>Conferência obrigatória:</b> aviso-prévio, médias, férias, 13º, FGTS, descontos e prazo de pagamento dependem da modalidade e das condições do contrato. Valores não validados não serão tratados como definitivos.</span></div>
@@ -128,7 +128,7 @@ export default function TerminationModulePage(){
     <div><span>Processos cancelados</span><b>{cases.filter(c=>c.case_status==="cancelled").length}</b></div>
    </div>
    <div className="payroll-create">
-    <div><div className="form-kicker">NOVO PROCESSO</div><h2>Abertura de rescisão</h2><p>Registre os dados iniciais. A memória de cálculo será desenvolvida na próxima etapa.</p></div>
+    <div><div className="form-kicker">NOVO PROCESSO</div><h2>Abertura de rescisão</h2><p>Registre os dados iniciais. Depois, organize as verbas e descontos na memória de cálculo preliminar.</p></div>
     <form onSubmit={createCase}>
      <label>Colaborador<select required value={employeeId} onChange={e=>setEmployeeId(e.target.value)}><option value="">Selecione o colaborador</option>{employees.map(e=><option key={e.id} value={e.id}>{e.employee_code} — {e.full_name}</option>)}</select></label>
      <label>Motivo do desligamento<select value={reason} onChange={e=>setReason(e.target.value)}>{Object.entries(reasons).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
