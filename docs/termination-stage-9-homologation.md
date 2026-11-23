@@ -131,6 +131,7 @@ A migration `20261123110000_add_termination_final_validation.sql` implementa:
 - bloqueio de validação com item em `draft`, `pending_review`, `blocked`, verba financeira ainda `formula_pending` ou sem fundamento;
 - snapshot da aprovação com responsável, data, justificativa, checklist e itens;
 - bloqueio de alterações no processo e na memória após validação, inclusive por atualização direta via API;
+- médias encaminhadas para verbas de destino permanecem bloqueadas para revisão final enquanto o destino não tiver recálculo próprio; o valor copiado da média não é aceito como verba calculada;
 - auditoria AFTER permanece na mesma transação da operação.
 
 ### Casos de aceite adicionais
