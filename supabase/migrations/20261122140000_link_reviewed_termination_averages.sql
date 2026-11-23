@@ -45,7 +45,10 @@ begin
     or v_source.item_code not like 'MEDIA_%'
     or coalesce(v_source.calculation_snapshot -> 'review' ->> 'status', '') <> 'reviewed_for_routing'
     or coalesce(v_source.calculation_snapshot -> 'review' ->> 'destination', '') = ''
-    or coalesce(v_source.calculation_snapshot -> 'review' ->> 'legal_basis', '') = '' then
+    or coalesce(v_source.calculation_snapshot -> 'review' ->> 'legal_basis', '') = ''
+    or coalesce(new.calculation_snapshot -> 'destination' ->> 'kind', '') <> coalesce(v_source.calculation_snapshot -> 'review' ->> 'destination', '')
+    or coalesce(new.calculation_snapshot -> 'destination' ->> 'label', '') <> coalesce(v_source.calculation_snapshot -> 'review' ->> 'destination_label', '')
+    or coalesce(trim(new.legal_basis), '') <> coalesce(v_source.calculation_snapshot -> 'review' ->> 'legal_basis', '') then
     raise exception 'A origem deve ser uma média informativa revisada e conferida para encaminhamento no mesmo processo e organização.';
   end if;
 
