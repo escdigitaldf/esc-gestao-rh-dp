@@ -56,60 +56,17 @@ export default function TerminationAverageApplication({organizationId,terminatio
     }
     setSaving(item.id);
     const s=createClient();
-    if(item.calculation_status!=="reviewed"){
-      const previous=item.calculation_snapshot||{};
-      const {error:updateError}=await s.from("payroll_termination_calculation_items")
-        .update({
-          calculation_status:"reviewed",
-          review_notes:"Média conferida pelo DP para encaminhamento. A verba derivada permanece pendente de revisão.",
-          calculation_snapshot:{
-            ...previous,
-            review:{status:"reviewed_for_routing",reviewed_by:userId,reviewed_at:new Date().toISOString(),destination:target,destination_label:targetLabel,legal_basis:legal}
-          },
-          updated_by:userId
-        })
-        .eq("id",item.id).eq("organization_id",organizationId)
-        .eq("termination_case_id",terminationCaseId).eq("item_type","information")
-        .eq("calculation_status","pending_review");
-      if(updateError){setError(updateError.message);setSaving(null);return;}
-    }
-    const childCode="MEDIA_INTEGRADA_"+target.toUpperCase()+"_"+item.id.replaceAll("-","").slice(0,12).toUpperCase();
-    const {error:insertError}=await s.from("payroll_termination_calculation_items").insert({
-      organization_id:organizationId,
-      termination_case_id:terminationCaseId,
-      source_calculation_item_id:item.id,
-      item_code:childCode,
-      description:"Média encaminhada para "+targetLabel+" — "+item.description,
-      item_type:"earning",
-      reference_period:item.reference_period,
-      reference_quantity:item.reference_quantity,
-      reference_unit:item.reference_unit,
-      calculation_base:Number(item.amount),
-      rate:null,
-      amount:Number(item.amount),
-      calculation_method:"formula_pending",
-      calculation_status:"pending_review",
-      source_parameter_snapshot:{source_item_id:item.id,source_item_code:item.item_code,source_average_amount:Number(item.amount),destination:target,destination_label:targetLabel,legal_basis:legal},
-      calculation_snapshot:{
-        integration_version:1,
-        source:{item_id:item.id,item_code:item.item_code,description:item.description,amount:Number(item.amount),calculation_status:"reviewed"},
-        destination:{kind:target,label:targetLabel},
-        operator:{user_id:userId,confirmed:true,legal_basis:legal,created_at:new Date().toISOString()},
-        controls:[
-          "A origem é uma média informativa revisada; não é uma verba definitiva.",
-          "O valor foi copiado sem recalcular a verba de destino.",
-          "O item derivado permanece pendente de revisão e não pode ser tratado como validado.",
-          "A integração jurídica, o período, a base e o critério de cálculo da verba de destino exigem conferência específica."
-        ]
-      },
-      legal_basis:legal,
-      review_notes:"Valor encaminhado da média de origem, sem recálculo. Conferir elegibilidade, período, base, divisor e regra legal/coletiva da verba de destino.",
-      sort_order:80,
-      created_by:userId,
-      updated_by:userId
+    const {data:newItemId,error:routeError}=await s.rpc("route_payroll_termination_average",{
+      p_organization_id:organizationId,
+      p_termination_case_id:terminationCaseId,
+      p_source_item_id:item.id,
+      p_destination:target,
+      p_destination_label:targetLabel,
+      p_legal_basis:legal,
+      p_confirmed:true
     });
-    if(insertError){
-      setError(insertError.message);
+    if(routeError||!newItemId){
+      setError(routeError?.message||"Não foi possível confirmar o encaminhamento da média.");
       setSaving(null);
       return;
     }
