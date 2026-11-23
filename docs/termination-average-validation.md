@@ -60,3 +60,36 @@ Os cenários abaixo devem ser executados em ambiente de homologação com dados 
 | Valor de destino | Conferir os valores na memória | Valor é copiado sem recálculo; não atualiza automaticamente saldo, férias, 13º ou aviso |
 
 **Limite funcional:** o encaminhamento cria um provento preliminar separado e rastreável. Não escolhe rubricas definitivas, não determina incidência tributária, não calcula reflexos e não atualiza os pré-cálculos de saldo salarial, férias ou 13º. O DP deve conferir o enquadramento, a composição da remuneração, o período, o divisor e a norma aplicável antes de qualquer validação posterior.
+
+## Etapa 8 — homologação integrada e concorrência
+
+A etapa 7 foi endurecida para executar o encaminhamento por RPC transacional. A operação atualiza a origem e insere o item derivado na mesma transação do PostgreSQL; falha em qualquer validação reverte as duas alterações.
+
+| Cenário de aceite | Execução | Resultado esperado |
+|---|---|---|
+| Encaminhamento normal | Usuário autenticado autorizado, média `MEDIA_*` pendente, destino e fundamento preenchidos e checkbox marcado | RPC retorna ID do novo item; origem revisada e derivado criado como `earning / formula_pending / pending_review` |
+| Confirmação ausente | Chamar RPC com `p_confirmed=false` ou nulo | Exceção; nenhuma alteração na origem nem item derivado |
+| Usuário sem perfil autorizado | Chamar RPC sem membership ativa em papel permitido | Exceção; nenhuma gravação |
+| Origem de outro processo/organização | Informar ID de média fora do processo/organização | Origem não encontrada pela consulta escopada; exceção |
+| Código/natureza inválidos | Origem que não seja `information` ou não tenha prefixo `MEDIA_*` | Exceção |
+| Destino nulo ou fora da lista | Informar destino inválido | Exceção |
+| Fundamento ausente | Fundamento vazio ou nulo | Exceção |
+| Outra verba sem descrição | Destino `other` e rótulo vazio | Exceção |
+| Requisições concorrentes | Disparar dois encaminhamentos simultâneos para a mesma origem | Bloqueio de linha serializa as operações; apenas uma cria derivado, a segunda recebe exceção |
+| Falha na inserção do derivado | Forçar violação de constraint no insert em ambiente de teste | Transação reverte a atualização de status/snapshot da origem |
+| Alteração posterior da origem | Tentar alterar valor, natureza, status ou snapshot após existir derivado | Trigger bloqueia a alteração; retificação deve seguir fluxo auditável próprio |
+| Auditoria | Conferir registros de auditoria após sucesso | Atualização da origem e inserção do derivado aparecem com usuário e timestamp |
+| RLS de revisão | Usuário autorizado diferente do criador revisa a média | Permitido dentro da organização; autoria original permanece imutável |
+| Usuário fora da organização | Tentar revisão/encaminhamento sem membership ativa | Negado por RLS/RPC |
+
+### Verificações ainda necessárias antes da liberação operacional
+
+1. Aplicar a migração somente em ambiente de homologação autorizado.
+2. Criar dados sintéticos isolados (organização, processo, média informativa) e executar os cenários acima.
+3. Confirmar que o usuário revisor pode atualizar item criado por outro usuário, sem alterar `created_by`.
+4. Confirmar rollback transacional e concorrência com duas sessões independentes.
+5. Inspecionar auditoria e grants efetivos da RPC.
+6. Repetir build/preview após a integração RPC.
+7. Só então solicitar aprovação para aplicar a migração no ambiente de produção.
+
+**Limite atual:** nenhum desses testes altera dados reais; a migração permanece pendente. Build READY confirma compilação e geração de páginas, não a execução do RPC nem o comportamento de RLS no banco. O banco consultado não contém massa real de folha/rescisão para homologação ponta a ponta.
