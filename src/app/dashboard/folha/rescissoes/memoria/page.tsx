@@ -82,6 +82,34 @@ export default function TerminationCalculationMemoryPage(){
   if(e)setError(e.message);else setItems((data||[]) as ItemRow[]);
  }
 
+ async function reviewItem(item:ItemRow){
+  if(!selected||selected.case_status==="validated")return;
+  const note=window.prompt("Registre a evidência ou observação da conferência deste item:");
+  if(!note?.trim())return;
+  if(!window.confirm("Confirma que conferiu a base, o valor e o fundamento desta rubrica?"))return;
+  setSaving(true);setError("");setSuccess("");
+  const {error:e}=await createClient().rpc("review_payroll_termination_calculation_item",{
+   p_organization_id:org,p_termination_case_id:selected.id,p_item_id:item.id,
+   p_review_notes:note.trim(),p_confirmed:true
+  });
+  if(e)setError(e.message);else{setSuccess("Item revisado e registrado na trilha de auditoria.");await selectCase(selected.id);}
+  setSaving(false);
+ }
+
+ async function validateCase(){
+  if(!selected)return;
+  const justification=window.prompt("Justificativa da validação final. Registre a conferência realizada e a responsabilidade pela aprovação:");
+  if(!justification?.trim())return;
+  if(!window.confirm("Confirma a validação final? Após validado, o processo e sua memória ficarão bloqueados para alterações."))return;
+  setSaving(true);setError("");setSuccess("");
+  const {data,error:e}=await createClient().rpc("validate_payroll_termination_case",{
+   p_organization_id:org,p_termination_case_id:selected.id,
+   p_justification:justification.trim(),p_confirmed:true
+  });
+  if(e)setError(e.message);else{setSuccess("Processo rescisório validado e congelado. Registro de validação: "+JSON.stringify(data));await load();}
+  setSaving(false);
+ }
+
  async function addItem(event:React.FormEvent){
   event.preventDefault();setError("");setSuccess("");
   if(!selectedCase){setError("Selecione um processo rescisório.");return;}
@@ -124,6 +152,10 @@ export default function TerminationCalculationMemoryPage(){
     {selected&&<TerminationAcquiredVacationCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} terminationDate={selected.termination_date} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationThirteenthCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} admissionDate={employees[selected.employee_id]?.admission_date||null} terminationDate={selected.termination_date} projectedNoticeEndDate={selected.projected_notice_end_date} reason={selected.termination_reason} noticeType={selected.notice_type} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     <div className="employee-stats payroll-stats"><div><span>Proventos preliminares</span><b>{money(totals.earnings)}</b></div><div><span>Descontos preliminares</span><b>{money(totals.deductions)}</b></div><div><span>Líquido preliminar</span><b>{money(totals.earnings-totals.deductions)}</b></div><div><span>Encargos patronais informados</span><b>{money(totals.charges)}</b></div></div>
+    <div className="payroll-create">
+     <div><div className="form-kicker">CONTROLE DE APROVAÇÃO</div><h2>Validação final</h2><p>{selected?.case_status==="validated"?"Processo validado e bloqueado para alterações.":"A validação exige checklist completo, todos os itens revisados, fundamento das verbas e fórmulas financeiras concluídas."}</p></div>
+     {selected?.case_status==="validated"?<span className="status-pill">Validado</span>:<button className="employee-primary" disabled={saving||!selected||selected.case_status==="cancelled"||selected.case_status==="draft"} onClick={()=>void validateCase()}>Validar e bloquear processo</button>}
+    </div>
     <div className="payroll-create"><div><div className="form-kicker">NOVO ITEM</div><h2>Adicionar verba ou informação</h2><p>O valor será gravado exatamente como informado, sem aplicação automática de alíquota ou fórmula.</p></div>
      <form onSubmit={addItem}>
       <div className="form-two"><label>Natureza<select value={itemType} onChange={e=>setItemType(e.target.value)}><option value="earning">Provento</option><option value="deduction">Desconto</option><option value="employer_charge">Encargo patronal</option><option value="information">Informativo</option></select></label><label>Código da rubrica<input required value={code} onChange={e=>setCode(e.target.value)} placeholder="Ex.: SALDO_SALARIO"/></label></div>
@@ -133,11 +165,11 @@ export default function TerminationCalculationMemoryPage(){
       <div className="form-two"><label>Alíquota/fator informado<input type="number" step="0.00000001" value={rate} onChange={e=>setRate(e.target.value)} placeholder="Opcional"/></label><label>Valor do item (R$)<input required type="number" min="0" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label></div>
       <label>Fundamento legal ou coletivo<input value={legalBasis} onChange={e=>setLegalBasis(e.target.value)} placeholder="Informe artigo, CCT/ACT, cláusula ou referência"/></label>
       <label>Observação da conferência<textarea rows={2} value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} placeholder="Origem do valor, documento consultado ou pendência"/></label>
-      <button className="employee-primary" disabled={saving}>{saving?"Salvando...":<><Plus size={15}/> Registrar item preliminar</>}</button>
+      <button className="employee-primary" disabled={saving||selected?.case_status==="validated"}>{saving?"Salvando...":<><Plus size={15}/> Registrar item preliminar</>}</button>
      </form>
     </div>
     <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Itens da memória</h2><p>{items.length} item(ns) · todos sujeitos à conferência do DP</p></div><button className="employee-secondary" onClick={()=>void selectCase(selectedCase)} disabled={saving}><RefreshCw size={14}/> Atualizar</button></div>
-     {!items.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum item informado</b><p>Adicione as verbas, descontos e informações que compõem a conferência deste processo.</p></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Natureza</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Base</th><th>Fator</th><th>Valor</th><th>Situação</th><th>Fundamento</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{typeLabel[x.item_type]||x.item_type}</td><td><b>{x.item_code}</b></td><td>{x.description}</td><td>{[x.reference_quantity??null,x.reference_unit,x.reference_period].filter(Boolean).join(" · ")||"—"}</td><td>{x.calculation_base===null?"—":money(Number(x.calculation_base))}</td><td>{x.rate===null?"—":Number(x.rate).toLocaleString("pt-BR")}</td><td><b>{money(Number(x.amount))}</b></td><td><span className="dependent-inactive">Pendente de revisão</span></td><td>{x.legal_basis||"Não informado"}</td></tr>)}</tbody></table></div>}
+     {!items.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum item informado</b><p>Adicione as verbas, descontos e informações que compõem a conferência deste processo.</p></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Natureza</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Base</th><th>Fator</th><th>Valor</th><th>Situação</th><th>Fundamento</th><th>Ação</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{typeLabel[x.item_type]||x.item_type}</td><td><b>{x.item_code}</b></td><td>{x.description}</td><td>{[x.reference_quantity??null,x.reference_unit,x.reference_period].filter(Boolean).join(" · ")||"—"}</td><td>{x.calculation_base===null?"—":money(Number(x.calculation_base))}</td><td>{x.rate===null?"—":Number(x.rate).toLocaleString("pt-BR")}</td><td><b>{money(Number(x.amount))}</b></td><td><span className="dependent-inactive">Pendente de revisão</span></td><td>{x.legal_basis||"Não informado"}</td><td>{x.calculation_status==="reviewed"?<span className="status-pill">Revisado</span>:<button className="employee-secondary" disabled={saving||selected?.case_status==="validated"||x.calculation_status==="blocked"} onClick={()=>void reviewItem(x)}>Revisar item</button>}</td></tr>)}</tbody></table></div>}
     </div>
    </>}
   </section>
