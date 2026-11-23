@@ -42,8 +42,19 @@ begin
     or v_source.termination_case_id <> new.termination_case_id
     or v_source.item_type <> 'information'
     or v_source.calculation_status <> 'reviewed'
-    or v_source.item_code not like 'MEDIA_%' then
-    raise exception 'A origem deve ser uma média informativa revisada do mesmo processo e organização.';
+    or v_source.item_code not like 'MEDIA_%'
+    or coalesce(v_source.calculation_snapshot -> 'review' ->> 'status', '') <> 'reviewed_for_routing'
+    or coalesce(v_source.calculation_snapshot -> 'review' ->> 'destination', '') = ''
+    or coalesce(v_source.calculation_snapshot -> 'review' ->> 'legal_basis', '') = '' then
+    raise exception 'A origem deve ser uma média informativa revisada e conferida para encaminhamento no mesmo processo e organização.';
+  end if;
+
+  if new.item_type <> 'earning'
+    or new.calculation_status <> 'pending_review'
+    or new.calculation_method <> 'formula_pending'
+    or new.amount <> v_source.amount
+    or coalesce(trim(new.legal_basis), '') = '' then
+    raise exception 'A verba derivada deve preservar o valor da média e permanecer como provento pendente de revisão, com fundamento informado.';
   end if;
 
   if tg_op = 'UPDATE' and old.source_calculation_item_id is distinct from new.source_calculation_item_id then
