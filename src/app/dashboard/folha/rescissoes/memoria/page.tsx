@@ -11,10 +11,11 @@ import TerminationAcquiredVacationCalculator from "./TerminationAcquiredVacation
 import TerminationThirteenthCalculator from "./TerminationThirteenthCalculator";
 import TerminationRemunerationEvidence from "./TerminationRemunerationEvidence";
 import TerminationAverageEngine from "./TerminationAverageEngine";
+import TerminationAverageApplication from "./TerminationAverageApplication";
 
 type CaseRow = { id: string; employee_id: string; termination_date: string; termination_reason: string; notice_type: string; projected_notice_end_date: string | null; case_status: string; calculation_status: string; };
 type Employee = { id: string; employee_code: string; full_name: string; admission_date: string | null; };
-type ItemRow = { id: string; item_code: string; description: string; item_type: string; reference_period: string | null; reference_quantity: number | null; reference_unit: string | null; calculation_base: number | null; rate: number | null; amount: number; calculation_method: string; calculation_status: string; legal_basis: string | null; review_notes: string | null; };
+type ItemRow = { id: string; item_code: string; description: string; item_type: string; reference_period: string | null; reference_quantity: number | null; reference_unit: string | null; calculation_base: number | null; rate: number | null; amount: number; calculation_method: string; calculation_status: string; legal_basis: string | null; review_notes: string | null; source_calculation_item_id: string | null; calculation_snapshot: Record<string, unknown> | null; };
 const reasonLabel:Record<string,string>={employer_without_cause:"Dispensa sem justa causa",employee_resignation:"Pedido de demissão",mutual_agreement:"Acordo entre as partes",employer_with_cause:"Dispensa por justa causa",fixed_term_end:"Término de contrato",indirect_termination:"Rescisão indireta",death:"Falecimento",other:"Outro"};
 const typeLabel:Record<string,string>={earning:"Provento",deduction:"Desconto",employer_charge:"Encargo patronal",information:"Informativo"};
 const money=(v:number)=>Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -66,7 +67,7 @@ export default function TerminationCalculationMemoryPage(){
   const chosen=selectedCase&&rows.some(x=>x.id===selectedCase)?selectedCase:rows[0]?.id||"";
   setSelectedCase(chosen);
   if(chosen){
-   const {data:itemData,error:itemError}=await s.from("payroll_termination_calculation_items").select("id,item_code,description,item_type,reference_period,reference_quantity,reference_unit,calculation_base,rate,amount,calculation_method,calculation_status,legal_basis,review_notes").eq("organization_id",membership.organization_id).eq("termination_case_id",chosen).order("sort_order").order("created_at");
+   const {data:itemData,error:itemError}=await s.from("payroll_termination_calculation_items").select("id,item_code,description,item_type,reference_period,reference_quantity,reference_unit,calculation_base,rate,amount,calculation_method,calculation_status,legal_basis,review_notes,source_calculation_item_id,calculation_snapshot").eq("organization_id",membership.organization_id).eq("termination_case_id",chosen).order("sort_order").order("created_at");
    if(itemError){setError(itemError.message);setLoading(false);return;}
    setItems((itemData||[]) as ItemRow[]);
   }else setItems([]);
@@ -77,7 +78,7 @@ export default function TerminationCalculationMemoryPage(){
  async function selectCase(id:string){
   setSelectedCase(id);setError("");setSuccess("");
   if(!id){setItems([]);return;}
-  const {data,error:e}=await createClient().from("payroll_termination_calculation_items").select("id,item_code,description,item_type,reference_period,reference_quantity,reference_unit,calculation_base,rate,amount,calculation_method,calculation_status,legal_basis,review_notes").eq("organization_id",org).eq("termination_case_id",id).order("sort_order").order("created_at");
+  const {data,error:e}=await createClient().from("payroll_termination_calculation_items").select("id,item_code,description,item_type,reference_period,reference_quantity,reference_unit,calculation_base,rate,amount,calculation_method,calculation_status,legal_basis,review_notes,source_calculation_item_id,calculation_snapshot").eq("organization_id",org).eq("termination_case_id",id).order("sort_order").order("created_at");
   if(e)setError(e.message);else setItems((data||[]) as ItemRow[]);
  }
 
@@ -118,6 +119,7 @@ export default function TerminationCalculationMemoryPage(){
     {selected&&<><TerminationCaseDataPanel organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/><TerminationRubricGuide reason={selected.termination_reason} noticeType={selected.notice_type}/></>}
     {selected&&<TerminationRemunerationEvidence organizationId={org} employeeId={selected.employee_id} terminationDate={selected.termination_date}/>}
     {selected&&<TerminationAverageEngine organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} terminationDate={selected.termination_date} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
+    {selected&&<TerminationAverageApplication organizationId={org} terminationCaseId={selected.id} userId={userId} items={items} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationPreliminaryCalculator organizationId={org} terminationCaseId={selected.id} userId={userId} reason={selected.termination_reason} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationAcquiredVacationCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} terminationDate={selected.termination_date} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
     {selected&&<TerminationThirteenthCalculator organizationId={org} terminationCaseId={selected.id} employeeId={selected.employee_id} admissionDate={employees[selected.employee_id]?.admission_date||null} terminationDate={selected.termination_date} projectedNoticeEndDate={selected.projected_notice_end_date} reason={selected.termination_reason} noticeType={selected.notice_type} userId={userId} existingCodes={items.map(x=>x.item_code)} onSaved={()=>selectCase(selected.id)}/> }
