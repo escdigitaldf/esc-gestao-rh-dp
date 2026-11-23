@@ -94,3 +94,27 @@ Para cada cenário, registrar:
 - Nenhuma migração aplicada nesta etapa.
 - Nenhuma fixture ou dado real inserido.
 - PR #2 continua aberto em draft; não foi feito merge nem deploy de produção.
+
+
+## Etapa 10 — auditoria após gravação
+
+A migração `20261123100000_fix_termination_audit_after_write.sql` separa:
+- preparação dos campos de atualização e verificação de imutabilidade em gatilhos `BEFORE`;
+- gravação de `payroll_termination_case_audit` e `payroll_termination_calculation_item_audit` em gatilhos `AFTER`.
+
+A separação é necessária porque as tabelas de auditoria possuem chaves estrangeiras para os registros principais. Inserir a auditoria no `BEFORE INSERT` pode falhar, pois a linha referenciada ainda não foi persistida.
+
+### Casos adicionais de aceite
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| A01 | Inserir processo de rescisão | Processo criado e registro INSERT de auditoria persistido |
+| A02 | Atualizar processo | Registro UPDATE contém estado anterior e novo |
+| A03 | Inserir item da memória | Item criado e auditoria INSERT vinculada à linha existente |
+| A04 | Atualizar item da memória | Auditoria UPDATE vinculada, com old_record e new_record |
+| A05 | Forçar falha ao inserir auditoria | Operação principal inteira deve sofrer rollback |
+| A06 | Tentar alterar organização, colaborador/processo ou created_by | Operação rejeitada |
+| A07 | Consultar auditoria como usuário autorizado | Leitura permitida pela RLS |
+| A08 | Consultar auditoria como usuário não autorizado | Nenhuma linha visível |
+
+**Atenção:** esta correção foi criada como migração aditiva e ainda não foi aplicada. A execução dos casos A01–A08 depende de ambiente isolado de homologação. Não considerar a auditoria validada apenas pela existência dos triggers no código.
