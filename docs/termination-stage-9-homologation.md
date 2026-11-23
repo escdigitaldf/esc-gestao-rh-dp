@@ -39,6 +39,7 @@ Não usar CPF, dados pessoais, remunerações ou documentos de colaboradores rea
 | H04 | Origem de outra organização/processo | Negado; nenhuma alteração |
 | H05 | Origem bloqueada, rascunho ou de natureza diferente | Negado |
 | H06 | Código de origem sem prefixo `MEDIA_` | Negado |
+| H06a | Código semelhante, mas sem o sublinhado literal (`MEDIAx...`) | Negado; prefixo deve ser exatamente `MEDIA_` |
 | H07 | Destino nulo ou fora da lista | Negado |
 | H08 | Fundamento legal/coletivo vazio | Negado |
 | H09 | Destino `other` sem descrição | Negado |
