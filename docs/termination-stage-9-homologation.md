@@ -126,7 +126,7 @@ A separação é necessária porque as tabelas de auditoria possuem chaves estra
 A migration `20261123110000_add_termination_final_validation.sql` implementa:
 - status final `validated` no processo, separado de `ready_for_validation`;
 - RPC `review_payroll_termination_calculation_item` para revisão individual por usuário autorizado, com confirmação e evidência obrigatória;
-- para verbas financeiras, exige fundamento legal/coletivo; quando o item nasceu como `formula_pending`, o revisor precisa declarar que concluiu a conferência pelo método `manual` ou `parameter_table`;
+- para verbas financeiras, exige fundamento legal/coletivo; quando o item nasceu como `formula_pending`, o revisor precisa declarar que concluiu a conferência pelo método `manual` ou `parameter_table`; a opção por tabela exige vínculo com a tabela de parâmetros efetivamente utilizada;
 - RPC `validate_payroll_termination_case` transacional, que exige processo em conferência, checklist não vazio e integralmente concluído, memória não vazia e todos os itens revisados;
 - bloqueio de validação com item em `draft`, `pending_review`, `blocked`, verba financeira ainda `formula_pending` ou sem fundamento;
 - snapshot da aprovação com responsável, data, justificativa, checklist e itens;
