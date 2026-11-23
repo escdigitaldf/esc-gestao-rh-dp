@@ -86,11 +86,17 @@ export default function TerminationCalculationMemoryPage(){
   if(!selected||selected.case_status==="validated")return;
   const note=window.prompt("Registre a evidência ou observação da conferência deste item:");
   if(!note?.trim())return;
-  if(!window.confirm("Confirma que conferiu a base, o valor e o fundamento desta rubrica?"))return;
+  let resolvedMethod=item.calculation_method;
+  if(item.calculation_method==="formula_pending"&&item.item_type!=="information"){
+   const method=window.prompt("A fórmula preliminar foi concluída e conferida? Informe manual ou parameter_table:", "manual");
+   if(!method||!["manual","parameter_table"].includes(method.trim()))return;
+   resolvedMethod=method.trim();
+  }
+  if(!window.confirm("Confirma que conferiu a base, o valor, o método e o fundamento desta rubrica?"))return;
   setSaving(true);setError("");setSuccess("");
   const {error:e}=await createClient().rpc("review_payroll_termination_calculation_item",{
    p_organization_id:org,p_termination_case_id:selected.id,p_item_id:item.id,
-   p_review_notes:note.trim(),p_confirmed:true
+   p_review_notes:note.trim(),p_resolved_method:resolvedMethod,p_confirmed:true
   });
   if(e)setError(e.message);else{setSuccess("Item revisado e registrado na trilha de auditoria.");await selectCase(selected.id);}
   setSaving(false);
