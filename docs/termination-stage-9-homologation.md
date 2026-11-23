@@ -116,5 +116,6 @@ A separação é necessária porque as tabelas de auditoria possuem chaves estra
 | A06 | Tentar alterar organização, colaborador/processo ou created_by | Operação rejeitada |
 | A07 | Consultar auditoria como usuário autorizado | Leitura permitida pela RLS |
 | A08 | Consultar auditoria como usuário não autorizado | Nenhuma linha visível |
+| A09 | Usuário B, autorizado e diferente do criador, atualiza checklist/processo | Permitido; created_by permanece A e updated_by identifica B |
 
 **Atenção:** esta correção foi criada como migração aditiva e ainda não foi aplicada. A execução dos casos A01–A08 depende de ambiente isolado de homologação. Não considerar a auditoria validada apenas pela existência dos triggers no código.
