@@ -39,3 +39,24 @@ Esta matriz valida a integridade da amostra do motor assistido. Não define divi
 - O divisor por ocorrência é uma ferramenta de análise, não uma regra jurídica presumida.
 - Não há massa real de folha, rubricas ou eventos no banco consultado. A homologação operacional depende de dados representativos, incluindo comissões, horas extras, adicionais e DSR.
 - A atualização monetária, habitualidade, sazonalidade, afastamentos e critérios específicos de cada verba permanecem sob validação normativa e coletiva.
+
+## Etapa 7 — encaminhamento controlado de médias
+
+Os cenários abaixo devem ser executados em ambiente de homologação com dados sintéticos. A integração não transforma a média em verba definitiva.
+
+| Cenário | Preparação | Resultado esperado |
+|---|---|---|
+| Média informativa pendente | Item `information`, código `MEDIA_*`, status `pending_review` | Só pode ser encaminhada após confirmação explícita do DP, destino e fundamento |
+| Média informativa revisada | Item de origem com status `reviewed` e metadados de revisão | Elegível para encaminhamento, sem validação automática da verba derivada |
+| Origem não revisada | Item `information` em `draft` ou `blocked` | Banco rejeita a criação do item derivado |
+| Fundamento ausente | Tentar encaminhar sem base legal/coletiva | Interface bloqueia; banco também rejeita |
+| Destino não informado | Tentar encaminhar sem natureza de destino | Interface bloqueia |
+| Valor alterado | Inserir item derivado com valor diferente da origem | Trigger do banco rejeita |
+| Destino sem natureza de provento | Inserir item derivado como desconto/informativo/encargo | Constraint/trigger rejeita |
+| Duplicidade | Criar dois itens derivados para a mesma média | Índice único rejeita o segundo vínculo |
+| Origem de outro processo | Usar média de outra organização ou processo | Trigger do banco rejeita |
+| Média já encaminhada | Reabrir a mesma média após integração | Interface informa vínculo existente e não oferece nova aplicação |
+| Item derivado | Conferir status e método após integração | Deve permanecer `earning`, `formula_pending`, `pending_review` |
+| Valor de destino | Conferir os valores na memória | Valor é copiado sem recálculo; não atualiza automaticamente saldo, férias, 13º ou aviso |
+
+**Limite funcional:** o encaminhamento cria um provento preliminar separado e rastreável. Não escolhe rubricas definitivas, não determina incidência tributária, não calcula reflexos e não atualiza os pré-cálculos de saldo salarial, férias ou 13º. O DP deve conferir o enquadramento, a composição da remuneração, o período, o divisor e a norma aplicável antes de qualquer validação posterior.
