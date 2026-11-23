@@ -37,10 +37,12 @@ export default function TerminationAverageApplication({organizationId,terminatio
 
   async function apply(item:Item){
     setError("");setSuccess("");
-    const target=destination[item.id]||"";
-    const targetLabel=target==="other"?(otherLabel[item.id]||"").trim():destinations.find(x=>x.value===target)?.label||"";
-    const legal=basis[item.id]?.trim()||"";
-    if(!target||!targetLabel||!legal||!confirmed[item.id]){
+    const review=(item.calculation_snapshot?.review||{}) as {destination?:string;destination_label?:string;legal_basis?:string};
+    const target=destination[item.id]??(item.calculation_status==="reviewed"?review.destination||"": "");
+    const targetLabel=target==="other"?(otherLabel[item.id]??review.destination_label??"").trim():destinations.find(x=>x.value===target)?.label||"";
+    const legal=(basis[item.id]??(item.calculation_status==="reviewed"?review.legal_basis||"": "")).trim();
+    const operatorConfirmed=confirmed[item.id]??item.calculation_status==="reviewed";
+    if(!target||!targetLabel||!legal||!operatorConfirmed){
       setError("Defina a verba de destino, informe o fundamento legal/coletivo e confirme a conferência antes de encaminhar a média.");
       return;
     }
@@ -138,13 +140,13 @@ export default function TerminationAverageApplication({organizationId,terminatio
             !canRoute?<div className="notice error">Esta média não está em situação elegível para encaminhamento.</div>:
             <>
               <div className="form-two">
-                <label>Verba de destino<select value={destination[item.id]||""} onChange={e=>setDestination(old=>({...old,[item.id]:e.target.value}))}>
+                <label>Verba de destino<select value={destination[item.id]??((item.calculation_snapshot?.review as {destination?:string}|undefined)?.destination||"")} onChange={e=>setDestination(old=>({...old,[item.id]:e.target.value}))}>
                   <option value="">Selecione...</option>{destinations.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}
                 </select></label>
-                {destination[item.id]==="other"&&<label>Identifique a verba<input value={otherLabel[item.id]||""} onChange={e=>setOtherLabel(old=>({...old,[item.id]:e.target.value}))} placeholder="Descrição da verba"/></label>}
+                {(destination[item.id]??((item.calculation_snapshot?.review as {destination?:string}|undefined)?.destination||""))==="other"&&<label>Identifique a verba<input value={otherLabel[item.id]??((item.calculation_snapshot?.review as {destination_label?:string}|undefined)?.destination_label||"")} onChange={e=>setOtherLabel(old=>({...old,[item.id]:e.target.value}))} placeholder="Descrição da verba"/></label>}
               </div>
-              <label>Fundamento legal ou coletivo específico da verba de destino<input value={basis[item.id]||""} onChange={e=>setBasis(old=>({...old,[item.id]:e.target.value}))} placeholder="Artigo, cláusula CCT/ACT e vigência"/></label>
-              <label className="dependent-privacy" style={{alignItems:"center"}}><input type="checkbox" checked={!!confirmed[item.id]} onChange={e=>setConfirmed(old=>({...old,[item.id]:e.target.checked}))}/><span>Confirmo que conferi a média de origem, a verba de destino, o fundamento aplicável e que o valor encaminhado ainda exige validação independente.</span></label>
+              <label>Fundamento legal ou coletivo específico da verba de destino<input value={basis[item.id]??((item.calculation_snapshot?.review as {legal_basis?:string}|undefined)?.legal_basis||"")} onChange={e=>setBasis(old=>({...old,[item.id]:e.target.value}))} placeholder="Artigo, cláusula CCT/ACT e vigência"/></label>
+              <label className="dependent-privacy" style={{alignItems:"center"}}><input type="checkbox" checked={confirmed[item.id]??item.calculation_status==="reviewed"} onChange={e=>setConfirmed(old=>({...old,[item.id]:e.target.checked}))}/><span>Confirmo que conferi a média de origem, a verba de destino, o fundamento aplicável e que o valor encaminhado ainda exige validação independente.</span></label>
               <button className="employee-primary" disabled={saving!==null||!canRoute} onClick={()=>void apply(item)}>{saving===item.id?"Encaminhando...":"Confirmar revisão e criar verba pendente"}</button>
             </>}
         </article>;
