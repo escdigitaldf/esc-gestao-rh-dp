@@ -74,3 +74,35 @@ for each row execute function public.validate_payroll_termination_item_source();
 
 comment on column public.payroll_termination_calculation_items.source_calculation_item_id is
 'Origem informativa revisada de uma verba preliminar derivada. Relação única, imutável e restrita ao mesmo processo e organização.';
+
+-- Revisores autorizados da organização podem revisar itens criados por outro operador.
+-- A autoria original continua imutável pelo trigger de auditoria já existente.
+drop policy if exists payroll_termination_items_update on public.payroll_termination_calculation_items;
+create policy payroll_termination_items_update
+on public.payroll_termination_calculation_items for update to authenticated
+using (exists (
+  select 1
+  from public.organization_memberships m
+  join public.payroll_termination_cases c
+    on c.organization_id = m.organization_id
+   and c.id = payroll_termination_calculation_items.termination_case_id
+  where m.organization_id = payroll_termination_calculation_items.organization_id
+    and m.user_id = (select auth.uid())
+    and m.status = 'active'
+    and m.role = any(array['owner','admin','hr_manager','payroll'])
+    and c.case_status <> 'cancelled'
+))
+with check (
+  exists (
+    select 1
+    from public.organization_memberships m
+    join public.payroll_termination_cases c
+      on c.organization_id = m.organization_id
+     and c.id = payroll_termination_calculation_items.termination_case_id
+    where m.organization_id = payroll_termination_calculation_items.organization_id
+      and m.user_id = (select auth.uid())
+      and m.status = 'active'
+      and m.role = any(array['owner','admin','hr_manager','payroll'])
+      and c.case_status <> 'cancelled'
+  )
+);
