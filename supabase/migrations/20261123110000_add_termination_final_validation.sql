@@ -95,6 +95,7 @@ create or replace function public.review_payroll_termination_calculation_item(
   p_termination_case_id uuid,
   p_item_id uuid,
   p_review_notes text,
+  p_resolved_method text,
   p_confirmed boolean
 )
 returns void
@@ -145,18 +146,26 @@ begin
   end if;
 
   if v_item.item_type in ('earning','deduction','employer_charge') then
-    if v_item.calculation_method = 'formula_pending' then
-      raise exception 'A fórmula deste item ainda está pendente; conclua o cálculo antes da revisão.';
-    end if;
     if coalesce(trim(v_item.legal_basis),'') = '' then
       raise exception 'Informe o fundamento legal ou coletivo da verba antes da revisão.';
     end if;
+    if v_item.calculation_method = 'formula_pending'
+      and p_resolved_method not in ('manual','parameter_table') then
+      raise exception 'Informe se o cálculo foi concluído manualmente ou por tabela de parâmetros.';
+    end if;
+    if v_item.calculation_method <> 'formula_pending'
+      and p_resolved_method is distinct from v_item.calculation_method then
+      raise exception 'O método informado não corresponde ao método registrado no item.';
+    end if;
+  else
+    p_resolved_method := coalesce(p_resolved_method,v_item.calculation_method);
   end if;
 
   perform set_config('app.termination_item_review','on',true);
 
   update public.payroll_termination_calculation_items
   set calculation_status = 'reviewed',
+      calculation_method = coalesce(p_resolved_method,calculation_method),
       review_notes = trim(p_review_notes),
       updated_by = auth.uid()
   where id = p_item_id;
@@ -292,13 +301,13 @@ begin
 end;
 $$;
 
-revoke all on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,boolean) from public, anon;
-grant execute on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,boolean) to authenticated;
+revoke all on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,text,boolean) from public, anon;
+grant execute on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,text,boolean) to authenticated;
 
 revoke all on function public.validate_payroll_termination_case(uuid,uuid,text,boolean) from public, anon;
 grant execute on function public.validate_payroll_termination_case(uuid,uuid,text,boolean) to authenticated;
 
-comment on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,boolean) is
+comment on function public.review_payroll_termination_calculation_item(uuid,uuid,uuid,text,text,boolean) is
 'Revisa individualmente item rescisório, exigindo autorização, confirmação, observação e fundamento para verbas financeiras.';
 
 comment on function public.validate_payroll_termination_case(uuid,uuid,text,boolean) is
