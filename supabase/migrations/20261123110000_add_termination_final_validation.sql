@@ -150,7 +150,7 @@ begin
       raise exception 'Informe o fundamento legal ou coletivo da verba antes da revisão.';
     end if;
     if v_item.calculation_method = 'formula_pending'
-      and p_resolved_method not in ('manual','parameter_table') then
+      and (p_resolved_method is null or p_resolved_method not in ('manual','parameter_table')) then
       raise exception 'Informe se o cálculo foi concluído manualmente ou por tabela de parâmetros.';
     end if;
     if v_item.calculation_method <> 'formula_pending'
