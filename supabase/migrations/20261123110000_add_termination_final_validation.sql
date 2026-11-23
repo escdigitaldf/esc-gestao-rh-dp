@@ -153,6 +153,11 @@ begin
       and (p_resolved_method is null or p_resolved_method not in ('manual','parameter_table')) then
       raise exception 'Informe se o cálculo foi concluído manualmente ou por tabela de parâmetros.';
     end if;
+    if v_item.calculation_method = 'formula_pending'
+      and p_resolved_method = 'parameter_table'
+      and v_item.source_parameter_table_id is null then
+      raise exception 'A revisão por tabela exige vínculo com a tabela de parâmetros utilizada.';
+    end if;
     if v_item.calculation_method <> 'formula_pending'
       and p_resolved_method is distinct from v_item.calculation_method then
       raise exception 'O método informado não corresponde ao método registrado no item.';
