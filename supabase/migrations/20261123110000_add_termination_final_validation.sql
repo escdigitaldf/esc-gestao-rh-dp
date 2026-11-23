@@ -217,8 +217,8 @@ begin
   end if;
 
   select count(*) into v_incomplete_checklist_count
-  from jsonb_array_elements(v_case.checklist) item
-  where coalesce((item->>'done')::boolean,false) is not true;
+  from jsonb_array_elements(v_case.checklist) as checklist_item(value)
+  where coalesce((checklist_item.value->>'done')::boolean,false) is not true;
 
   if jsonb_array_length(v_case.checklist) = 0 or v_incomplete_checklist_count > 0 then
     raise exception 'Checklist documental incompleto: conclua todos os itens antes da validação.';
