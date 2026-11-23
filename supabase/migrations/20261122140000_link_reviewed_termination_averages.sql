@@ -137,7 +137,7 @@ begin
     raise exception 'Autenticação e confirmação expressa do DP são obrigatórias.';
   end if;
 
-  if p_destination not in ('thirteenth','vacation','notice','other')
+  if p_destination is null or p_destination not in ('thirteenth','vacation','notice','other')
     or coalesce(trim(p_legal_basis),'') = ''
     or (p_destination = 'other' and coalesce(trim(p_destination_label),'') = '') then
     raise exception 'Destino e fundamento legal/coletivo são obrigatórios.';
