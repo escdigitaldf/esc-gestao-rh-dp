@@ -119,3 +119,39 @@ A separação é necessária porque as tabelas de auditoria possuem chaves estra
 | A09 | Usuário B, autorizado e diferente do criador, atualiza checklist/processo | Permitido; created_by permanece A e updated_by identifica B |
 
 **Atenção:** esta correção foi criada como migração aditiva e ainda não foi aplicada. A execução dos casos A01–A08 depende de ambiente isolado de homologação. Não considerar a auditoria validada apenas pela existência dos triggers no código.
+
+
+## Etapa 11 — revisão de rubricas e validação final
+
+A migration `20261123110000_add_termination_final_validation.sql` implementa:
+- status final `validated` no processo, separado de `ready_for_validation`;
+- RPC `review_payroll_termination_calculation_item` para revisão individual por usuário autorizado, com confirmação e evidência obrigatória;
+- para verbas financeiras, exige fundamento legal/coletivo; quando o item nasceu como `formula_pending`, o revisor precisa declarar que concluiu a conferência pelo método `manual` ou `parameter_table`;
+- RPC `validate_payroll_termination_case` transacional, que exige processo em conferência, checklist não vazio e integralmente concluído, memória não vazia e todos os itens revisados;
+- bloqueio de validação com item em `draft`, `pending_review`, `blocked`, verba financeira ainda `formula_pending` ou sem fundamento;
+- snapshot da aprovação com responsável, data, justificativa, checklist e itens;
+- bloqueio de alterações no processo e na memória após validação, inclusive por atualização direta via API;
+- auditoria AFTER permanece na mesma transação da operação.
+
+### Casos de aceite adicionais
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| V01 | Usuário autorizado revisa item com evidência e confirmação | Item passa a `reviewed`, com ator/timestamp na auditoria |
+| V02 | Usuário sem papel permitido tenta revisar | Negado |
+| V03 | Revisão sem evidência ou confirmação | Negada |
+| V04 | Verba financeira sem fundamento legal/coletivo | Revisão negada |
+| V05 | Verba financeira `formula_pending` sem método final explícito | Revisão negada |
+| V06 | DP declara conclusão manual/tabela e registra evidência | Item revisado com método resolvido |
+| V07 | Tentar validar com checklist vazio/incompleto | Negado |
+| V08 | Tentar validar sem itens na memória | Negado |
+| V09 | Tentar validar com item pendente, bloqueado ou rascunho | Negado |
+| V10 | Tentar validar com fórmula financeira pendente ou fundamento ausente | Negado |
+| V11 | Processo e itens integralmente revisados; usuário autorizado confirma e justifica | Processo passa a `validated` com snapshot |
+| V12 | Tentar editar checklist/processo após validação | Negado |
+| V13 | Tentar inserir/editar item após validação | Negado |
+| V14 | Tentar definir `validated` diretamente por UPDATE/INSERT | Negado; somente RPC autorizada |
+| V15 | Falha na auditoria durante a validação | Toda a transação deve sofrer rollback |
+
+**Limite operacional:** migration criada no branch, não aplicada. Os cenários V01–V15 são critérios documentados, não testes executados. A revisão humana do valor não substitui conferência jurídica, convenção coletiva ou validação de documentos; a resolução de `formula_pending` significa que o DP assumiu a conclusão pelo método declarado, não que o sistema tenha comprovado a fórmula legal.
+
