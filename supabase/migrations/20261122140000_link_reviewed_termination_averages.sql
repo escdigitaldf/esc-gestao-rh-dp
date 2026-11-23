@@ -42,7 +42,7 @@ begin
     or v_source.termination_case_id <> new.termination_case_id
     or v_source.item_type <> 'information'
     or v_source.calculation_status <> 'reviewed'
-    or v_source.item_code not like 'MEDIA_%'
+    or left(coalesce(v_source.item_code,''),6) <> 'MEDIA_'
     or coalesce(v_source.calculation_snapshot -> 'review' ->> 'status', '') <> 'reviewed_for_routing'
     or coalesce(v_source.calculation_snapshot -> 'review' ->> 'destination', '') = ''
     or coalesce(v_source.calculation_snapshot -> 'review' ->> 'legal_basis', '') = ''
@@ -175,7 +175,7 @@ begin
 
   if not found
     or v_source.item_type <> 'information'
-    or v_source.item_code not like 'MEDIA_%'
+    or left(coalesce(v_source.item_code,''),6) <> 'MEDIA_'
     or v_source.calculation_status not in ('pending_review','reviewed') then
     raise exception 'A origem deve ser uma média informativa elegível do mesmo processo.';
   end if;
