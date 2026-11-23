@@ -71,7 +71,15 @@ $$;
 drop trigger if exists validate_payroll_termination_item_source_trigger
   on public.payroll_termination_calculation_items;
 create trigger validate_payroll_termination_item_source_trigger
-before insert or update of source_calculation_item_id, item_type, organization_id, termination_case_id
+before insert or update of
+  source_calculation_item_id,
+  item_type,
+  organization_id,
+  termination_case_id,
+  amount,
+  calculation_method,
+  calculation_snapshot,
+  legal_basis
 on public.payroll_termination_calculation_items
 for each row execute function public.validate_payroll_termination_item_source();
 
