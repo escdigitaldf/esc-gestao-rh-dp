@@ -67,7 +67,13 @@ begin
     and (
       (new.calculation_method = 'manual' and new.source_parameter_table_id is null)
       or
-      (new.calculation_method = 'parameter_table' and new.source_parameter_table_id is not null)
+      (new.calculation_method = 'parameter_table'
+        and new.source_parameter_table_id is not null
+        and exists (
+          select 1 from public.payroll_parameter_tables pt
+          where pt.id = new.source_parameter_table_id
+            and pt.organization_id = new.organization_id
+        ))
     ) then
     v_completed := true;
   else
@@ -127,6 +133,14 @@ begin
 
   if p_calculation_method = 'manual' and p_source_parameter_table_id is not null then
     raise exception 'Não informe tabela de parâmetros quando o método concluído for manual.';
+  end if;
+
+  if p_calculation_method = 'parameter_table' and not exists (
+    select 1 from public.payroll_parameter_tables pt
+    where pt.id = p_source_parameter_table_id
+      and pt.organization_id = p_organization_id
+  ) then
+    raise exception 'A tabela de parâmetros deve existir e pertencer à mesma organização do processo.';
   end if;
 
   if not exists (
