@@ -67,6 +67,15 @@ begin
     and coalesce(trim(v_destination_calculation ->> 'legal_basis'),'') = coalesce(trim(new.legal_basis),'')
     and coalesce(v_destination_calculation ->> 'confirmation','false') = 'true'
     and (
+      (new.calculation_status = 'pending_review'
+        and current_setting('app.termination_derived_calculation',true) = 'on')
+      or
+      (new.calculation_status = 'reviewed'
+        and tg_op = 'UPDATE'
+        and old.calculation_status = 'pending_review'
+        and current_setting('app.termination_item_review',true) = 'on')
+    )
+    and (
       (new.calculation_method = 'manual'
         and new.source_parameter_table_id is null
         and coalesce(v_destination_calculation ->> 'source_parameter_table_id','') = '')
