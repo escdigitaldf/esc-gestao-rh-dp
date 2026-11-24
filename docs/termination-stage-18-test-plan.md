@@ -108,6 +108,10 @@ rollback;
 
 O exemplo é deliberadamente um esqueleto: não deve ser executado sem fixtures reais, migrations aplicadas e claims de autenticação configurados.
 
+## Correção implementada durante a Etapa 18
+
+A revisão do fluxo revelou que a migration da Etapa 17 aceitava o item derivado no estado inicial e após recálculo, mas não aceitava a transição para `reviewed` executada pela RPC `review_payroll_termination_calculation_item`. Como essa RPC atualiza `calculation_method`, o trigger `UPDATE OF calculation_method` era disparado e rejeitava a transição. Foi criada a migration `20261123130000_allow_review_of_completed_derived_termination_items.sql` para corrigir esse contrato. A correção está apenas no branch; ainda não foi aplicada nem executada em banco.
+
 ## Critérios de aceite da Etapa 18
 
 - [ ] Revisão de compatibilidade das migrations 3, 5 e 17 concluída em ambiente isolado.
@@ -123,6 +127,7 @@ O exemplo é deliberadamente um esqueleto: não deve ser executado sem fixtures 
 ## Observações técnicas para revisão
 
 - A migration da Etapa 17 substitui a função de trigger `validate_payroll_termination_item_source()` e preserva o estado inicial e o estado concluído de um item derivado.
+- A migration `20261123130000_allow_review_of_completed_derived_termination_items.sql` (correção identificada nesta etapa) também atualiza o trigger para permitir que a RPC de revisão individual promova um recálculo concluído de `pending_review` para `reviewed`, exigindo o GUC transacional de revisão, snapshot íntegro, método e tabela coerentes. A promoção direta sem a RPC deve continuar sendo rejeitada.
 - A RPC de recálculo bloqueia primeiro a linha do processo com `FOR UPDATE`, alinhando sua ordem de lock com a validação final.
 - A validação final também bloqueia o processo antes de verificar checklist e itens. A revisão individual, por sua vez, bloqueia o item; a suíte deve verificar se a política de locks e os triggers não produzem deadlock em operações simultâneas.
 - A migration 17 usa `v_completed` apenas como atribuição sem leitura posterior; é código morto, sem efeito funcional aparente, e pode ser removido em uma revisão de limpeza.
