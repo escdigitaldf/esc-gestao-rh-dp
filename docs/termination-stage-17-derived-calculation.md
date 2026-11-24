@@ -40,7 +40,7 @@ O valor copiado da média é apenas a origem informativa; não é presumido como
 ## Limites da interface desta entrega
 
 - A interface solicita valor, método, base, alíquota/fator, período, quantidade, unidade, evidência e fundamento por diálogos de confirmação.
-- Para método `parameter_table`, o operador informa o UUID da tabela utilizada. A FK valida a existência, mas a validação de escopo/competência/versão da tabela deve ser coberta pela homologação e pode exigir endurecimento adicional conforme o schema efetivo.
+- Para método `parameter_table`, o operador informa o UUID da tabela utilizada. A RPC e o trigger conferem que a tabela existe e pertence à mesma organização do processo. A vigência da tabela para a competência de referência ainda exige conferência pelo DP e teste de homologação.
 - Não é um motor de cálculo automático. O DP informa o resultado após apuração fora desta ação e registra a evidência.
 
 ## Testes de aceite adicionados
