@@ -115,7 +115,23 @@ export default function TerminationCalculationMemoryPage(){
    parameterTableId=window.prompt("Informe o UUID da tabela de parâmetros utilizada:")?.trim()||null;
    if(!parameterTableId){setError("A tabela de parâmetros utilizada é obrigatória.");return;}
   }
-  const evidence=window.prompt("Descreva a memória/evidência do recálculo (base, período, divisor, critério e documento):");
+  const baseText=window.prompt("Base de cálculo (R$), se aplicável. Deixe em branco se não se aplicar:","");
+  if(baseText===null)return;
+  const calculationBase=baseText.trim()===""?null:Number(baseText.trim().replace(",","."));
+  if(calculationBase!==null&&(!Number.isFinite(calculationBase)||calculationBase<0)){setError("Base de cálculo inválida.");return;}
+  const rateText=window.prompt("Alíquota/fator utilizado, se aplicável. Deixe em branco se não se aplicar:","");
+  if(rateText===null)return;
+  const calculationRate=rateText.trim()===""?null:Number(rateText.trim().replace(",","."));
+  if(calculationRate!==null&&!Number.isFinite(calculationRate)){setError("Alíquota/fator inválido.");return;}
+  const referencePeriod=window.prompt("Período de referência, se aplicável:","") ;
+  if(referencePeriod===null)return;
+  const quantityText=window.prompt("Quantidade de referência, se aplicável. Deixe em branco se não se aplicar:","");
+  if(quantityText===null)return;
+  const referenceQuantity=quantityText.trim()===""?null:Number(quantityText.trim().replace(",","."));
+  if(referenceQuantity!==null&&!Number.isFinite(referenceQuantity)){setError("Quantidade de referência inválida.");return;}
+  const referenceUnit=window.prompt("Unidade da quantidade (dias, avos, horas etc.), se aplicável:","");
+  if(referenceUnit===null)return;
+  const evidence=window.prompt("Descreva a memória/evidência do recálculo (critério, divisor e documento):");
   if(!evidence?.trim())return;
   const basis=window.prompt("Informe o fundamento legal ou coletivo específico da verba de destino:",item.legal_basis||"");
   if(!basis?.trim())return;
@@ -124,7 +140,7 @@ export default function TerminationCalculationMemoryPage(){
   const {data,error:e}=await createClient().rpc("complete_payroll_termination_derived_calculation",{
    p_organization_id:org,p_termination_case_id:selected.id,p_item_id:item.id,
    p_final_amount:finalAmount,p_calculation_method:method,
-   p_calculation_base:null,p_rate:null,p_reference_period:null,p_reference_quantity:null,p_reference_unit:null,
+   p_calculation_base:calculationBase,p_rate:calculationRate,p_reference_period:referencePeriod.trim()||null,p_reference_quantity:referenceQuantity,p_reference_unit:referenceUnit.trim()||null,
    p_source_parameter_table_id:parameterTableId,p_evidence:evidence.trim(),p_legal_basis:basis.trim(),p_confirmed:true
   });
   if(e)setError(e.message);else{setSuccess("Recálculo concluído. A verba permanece pendente de revisão individual.");await selectCase(selected.id);}
