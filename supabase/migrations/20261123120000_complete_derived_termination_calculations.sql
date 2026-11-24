@@ -114,6 +114,7 @@ begin
   end if;
 
   if p_final_amount is null or p_final_amount < 0
+    or p_calculation_method is null
     or p_calculation_method not in ('manual','parameter_table')
     or coalesce(trim(p_evidence),'') = ''
     or coalesce(trim(p_legal_basis),'') = '' then
