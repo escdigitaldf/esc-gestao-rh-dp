@@ -39,9 +39,8 @@ O valor copiado da média é apenas a origem informativa; não é presumido como
 
 ## Limites da interface desta entrega
 
-- A interface solicita valor, método, evidência, fundamento e, se necessário, UUID da tabela de parâmetros por diálogos de confirmação.
-- Campos detalhados de base, alíquota, período, quantidade e unidade são aceitos pela RPC, mas a interface desta etapa os envia como nulos. A evidência textual é obrigatória; detalhamento estruturado desses campos pode ser ampliado em etapa posterior.
-- A interface não lista tabelas de parâmetros para seleção; para método `parameter_table`, o operador informa o UUID da tabela usada. A FK valida a existência, mas a validação de escopo/competência/versão da tabela deve ser coberta pela homologação e pode exigir endurecimento adicional conforme o schema efetivo.
+- A interface solicita valor, método, base, alíquota/fator, período, quantidade, unidade, evidência e fundamento por diálogos de confirmação.
+- Para método `parameter_table`, o operador informa o UUID da tabela utilizada. A FK valida a existência, mas a validação de escopo/competência/versão da tabela deve ser coberta pela homologação e pode exigir endurecimento adicional conforme o schema efetivo.
 - Não é um motor de cálculo automático. O DP informa o resultado após apuração fora desta ação e registra a evidência.
 
 ## Testes de aceite adicionados
