@@ -102,6 +102,35 @@ export default function TerminationCalculationMemoryPage(){
   setSaving(false);
  }
 
+ async function completeDerivedCalculation(item:ItemRow){
+  if(!selected||selected.case_status==="validated"||!item.source_calculation_item_id||item.calculation_method!=="formula_pending")return;
+  const amountText=window.prompt("Informe o valor final recalculado da verba de destino (R$). Use ponto ou vírgula decimal:");
+  if(amountText===null)return;
+  const finalAmount=Number(amountText.trim().replace(",","."));
+  if(!Number.isFinite(finalAmount)||finalAmount<0){setError("Informe um valor final válido e não negativo.");return;}
+  const method=window.prompt("Método efetivamente concluído: manual ou parameter_table","manual")?.trim();
+  if(!method||!["manual","parameter_table"].includes(method))return;
+  let parameterTableId:string|null=null;
+  if(method==="parameter_table"){
+   parameterTableId=window.prompt("Informe o UUID da tabela de parâmetros utilizada:")?.trim()||null;
+   if(!parameterTableId){setError("A tabela de parâmetros utilizada é obrigatória.");return;}
+  }
+  const evidence=window.prompt("Descreva a memória/evidência do recálculo (base, período, divisor, critério e documento):");
+  if(!evidence?.trim())return;
+  const basis=window.prompt("Informe o fundamento legal ou coletivo específico da verba de destino:",item.legal_basis||"");
+  if(!basis?.trim())return;
+  if(!window.confirm("Confirma o recálculo? O valor original da média será preservado no snapshot; a verba continuará pendente de revisão individual."))return;
+  setSaving(true);setError("");setSuccess("");
+  const {data,error:e}=await createClient().rpc("complete_payroll_termination_derived_calculation",{
+   p_organization_id:org,p_termination_case_id:selected.id,p_item_id:item.id,
+   p_final_amount:finalAmount,p_calculation_method:method,
+   p_calculation_base:null,p_rate:null,p_reference_period:null,p_reference_quantity:null,p_reference_unit:null,
+   p_source_parameter_table_id:parameterTableId,p_evidence:evidence.trim(),p_legal_basis:basis.trim(),p_confirmed:true
+  });
+  if(e)setError(e.message);else{setSuccess("Recálculo concluído. A verba permanece pendente de revisão individual.");await selectCase(selected.id);}
+  setSaving(false);
+ }
+
  async function validateCase(){
   if(!selected)return;
   const justification=window.prompt("Justificativa da validação final. Registre a conferência realizada e a responsabilidade pela aprovação:");
@@ -175,7 +204,7 @@ export default function TerminationCalculationMemoryPage(){
      </form>
     </div>
     <div className="employee-list-card payroll-list"><div className="employee-list-head"><div><h2>Itens da memória</h2><p>{items.length} item(ns) · todos sujeitos à conferência do DP</p></div><button className="employee-secondary" onClick={()=>void selectCase(selectedCase)} disabled={saving}><RefreshCw size={14}/> Atualizar</button></div>
-     {!items.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum item informado</b><p>Adicione as verbas, descontos e informações que compõem a conferência deste processo.</p></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Natureza</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Base</th><th>Fator</th><th>Valor</th><th>Situação</th><th>Fundamento</th><th>Ação</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{typeLabel[x.item_type]||x.item_type}</td><td><b>{x.item_code}</b></td><td>{x.description}</td><td>{[x.reference_quantity??null,x.reference_unit,x.reference_period].filter(Boolean).join(" · ")||"—"}</td><td>{x.calculation_base===null?"—":money(Number(x.calculation_base))}</td><td>{x.rate===null?"—":Number(x.rate).toLocaleString("pt-BR")}</td><td><b>{money(Number(x.amount))}</b></td><td>{x.calculation_status==="reviewed"?<span className="status-pill">Revisado</span>:x.calculation_status==="blocked"?<span className="dependent-inactive">Bloqueado</span>:<span className="dependent-inactive">Pendente de revisão</span>}</td><td>{x.legal_basis||"Não informado"}</td><td>{x.calculation_status==="reviewed"?<span className="status-pill">Revisado</span>:x.source_calculation_item_id&&x.calculation_method==="formula_pending"?<span className="dependent-inactive">Aguardando recálculo da verba de destino</span>:<button className="employee-secondary" disabled={saving||selected?.case_status==="validated"||x.calculation_status==="blocked"} onClick={()=>void reviewItem(x)}>Revisar item</button>}</td></tr>)}</tbody></table></div>}
+     {!items.length?<div className="employee-empty"><ClipboardList size={24}/><b>Nenhum item informado</b><p>Adicione as verbas, descontos e informações que compõem a conferência deste processo.</p></div>:<div className="table-scroll"><table className="employee-table"><thead><tr><th>Natureza</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Base</th><th>Fator</th><th>Valor</th><th>Situação</th><th>Fundamento</th><th>Ação</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{typeLabel[x.item_type]||x.item_type}</td><td><b>{x.item_code}</b></td><td>{x.description}</td><td>{[x.reference_quantity??null,x.reference_unit,x.reference_period].filter(Boolean).join(" · ")||"—"}</td><td>{x.calculation_base===null?"—":money(Number(x.calculation_base))}</td><td>{x.rate===null?"—":Number(x.rate).toLocaleString("pt-BR")}</td><td><b>{money(Number(x.amount))}</b></td><td>{x.calculation_status==="reviewed"?<span className="status-pill">Revisado</span>:x.calculation_status==="blocked"?<span className="dependent-inactive">Bloqueado</span>:<span className="dependent-inactive">Pendente de revisão</span>}</td><td>{x.legal_basis||"Não informado"}</td><td>{x.calculation_status==="reviewed"?<span className="status-pill">Revisado</span>:x.source_calculation_item_id&&x.calculation_method==="formula_pending"?<button className="employee-secondary" disabled={saving||selected?.case_status==="validated"} onClick={()=>void completeDerivedCalculation(x)}>Concluir recálculo</button>:<button className="employee-secondary" disabled={saving||selected?.case_status==="validated"||x.calculation_status==="blocked"} onClick={()=>void reviewItem(x)}>Revisar item</button>}</td></tr>)}</tbody></table></div>}
     </div>
    </>}
   </section>
