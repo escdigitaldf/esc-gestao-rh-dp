@@ -57,7 +57,7 @@ begin
     end if;
 
     if new.rat_rate not in (1.00000,2.00000,3.00000) then
-      raise exception 'RAT inválido. Informe o grau de risco de 1%, 2% ou 3%, conforme o CNAE preponderante e a documentação oficial.';
+      raise exception 'RAT inválido. Informe o grau de risco de 1%%, 2%% ou 3%%, conforme o CNAE preponderante e a documentação oficial.';
     end if;
 
     if new.fpas_source_reference !~ '[[:alnum:]]'
