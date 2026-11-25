@@ -44,5 +44,5 @@ end;
 $$;
 drop trigger if exists trg_guard_benefit_payroll_rubric_mapping on public.benefit_types;
 create trigger trg_guard_benefit_payroll_rubric_mapping
- before insert or update of employee_deduction_rubric_id,employer_cost_rubric_id,organization_id
+ before insert or update
  on public.benefit_types for each row execute function public.guard_benefit_payroll_rubric_mapping();
