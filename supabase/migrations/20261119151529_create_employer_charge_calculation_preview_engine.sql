@@ -226,7 +226,7 @@ begin
 
   return v_preview_id;
 end;
-$function$
+$function$;
 
 grant select on public.payroll_employer_charge_previews to authenticated;
 revoke insert,update,delete on public.payroll_employer_charge_previews from anon,authenticated;
