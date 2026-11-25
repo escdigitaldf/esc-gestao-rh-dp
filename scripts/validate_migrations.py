@@ -8,7 +8,7 @@ from pglast import parse_sql
 
 
 MIGRATIONS_DIR = Path("supabase/migrations")
-VERSION_PATTERN = re.compile(r"^(\d{14})_[a-z0-9_]+\.sql$")
+VERSION_PATTERN = re.compile(r"^(\d{12}|\d{14})_[a-z0-9_]+\.sql$")
 
 
 def main() -> int:
