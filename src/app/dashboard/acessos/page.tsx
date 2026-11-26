@@ -1,5 +1,5 @@
 "use client";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
 import {Building2,Check,LockKeyhole,Save,ShieldCheck,Users} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
@@ -10,10 +10,10 @@ type Member={id:string;user_id:string;role_id:string|null;role:string;status:str
 type Permission={id:string;role_id:string;permission_key:string;allowed:boolean};
 const catalog=[
  {group:"Painel e relatórios",items:[["dashboard.view","Visualizar painel"],["reports.view","Visualizar relatórios"],["reports.export","Exportar relatórios"]]},
- {group:"Colaboradores",items:[["employees.view","Visualizar colaboradores"],["employees.create","Cadastrar colaboradores"],["employees.update","Editar colaboradores"],["employees.delete","Excluir colaboradores"]]},
+ {group:"Colaboradores",items:[["employees.view","Visualizar colaboradores"],["employees.create","Cadastrar colaboradores"],["employees.update","Editar colaboradores"],["employees.delete","Excluir colaboradores"],["employees.manage","Gerenciar operações de colaboradores"]]},
  {group:"Estrutura organizacional",items:[["departments.view","Visualizar departamentos"],["departments.manage","Gerenciar departamentos"],["positions.view","Visualizar cargos"],["positions.manage","Gerenciar cargos"]]},
  {group:"Rotinas de RH",items:[["admissions.view","Visualizar admissões"],["admissions.manage","Gerenciar admissões"],["vacations.view","Visualizar férias"],["vacations.manage","Gerenciar férias"],["absences.view","Visualizar afastamentos"],["absences.manage","Gerenciar afastamentos"],["benefits.view","Visualizar benefícios"],["benefits.manage","Gerenciar benefícios"],["documents.view","Visualizar documentos"],["documents.manage","Gerenciar documentos"],["training.view","Visualizar treinamentos"],["training.manage","Gerenciar treinamentos"],["performance.view","Visualizar avaliações"],["performance.manage","Gerenciar avaliações"],["occupational_health.view","Visualizar saúde ocupacional"],["occupational_health.manage","Gerenciar saúde ocupacional"],["attendance.view","Visualizar frequência"],["attendance.manage","Gerenciar frequência"]]},
- {group:"Departamento pessoal",items:[["payroll.view","Visualizar folha"],["payroll.calculate","Calcular folha"],["payroll.close","Fechar folha"],["payroll.events.manage","Gerenciar eventos"],["payroll.termination.manage","Gerenciar rescisões"],["payroll.charges.view","Visualizar encargos"],["payroll.charges.manage","Gerenciar encargos"]]},
+ {group:"Departamento pessoal",items:[["payroll.view","Visualizar folha"],["payroll.calculate","Calcular folha"],["payroll.close","Fechar folha"],["payroll.events.manage","Gerenciar eventos"],["payroll.termination.manage","Gerenciar rescisões"],["payroll.charges.view","Visualizar encargos"],["payroll.charges.manage","Gerenciar encargos"],["payroll.manage","Gerenciar operações de folha e DP"]]},
  {group:"Administração",items:[["users.view","Visualizar usuários"],["users.manage","Gerenciar usuários"],["roles.manage","Gerenciar perfis e permissões"],["organization.settings","Configurar empresa"]]}
 ] as const;
 export default function AccessManagementPage(){
@@ -39,7 +39,7 @@ export default function AccessManagementPage(){
   const os=(ms||[]).map((m:any)=>({id:m.organization_id,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setOrgs(os);
   if(!os.length){router.replace("/onboarding");return;}
-  const chosen=os.find(o=>o.id===orgId)||os[0];setOrgId(chosen.id);
+  const chosen=os[0];setOrgId(chosen.id);
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",chosen.id).order("name"),
    s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",chosen.id).order("created_at")
@@ -47,12 +47,12 @@ export default function AccessManagementPage(){
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao carregar permissões.");setLoading(false);return;}
   setRoles(rr.data||[]);
   setMembers((mm.data||[]) as unknown as Member[]);
-  const nextRole=(rr.data||[]).find(r=>r.id===roleId)||(rr.data||[])[0];
+  const nextRole=(rr.data||[])[0];
   setRoleId(nextRole?.id||"");
   if(nextRole){const {data:pp,error:pe}=await s.from("organization_role_permissions").select("id,role_id,permission_key,allowed").eq("role_id",nextRole.id);if(pe)setError(pe.message);setPermissions(pp||[]);}
   else setPermissions([]);
   setLoading(false);
- },[router,orgId,roleId]);
+ },[router]);
  useEffect(()=>{void load()},[load]);
  async function changeOrg(value:string){
   setOrgId(value);setRoleId("");setPermissions([]);
