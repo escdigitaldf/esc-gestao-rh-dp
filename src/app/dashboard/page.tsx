@@ -14,14 +14,18 @@ const br=(n:number)=>n.toLocaleString("pt-BR");
 const dateBR=(v:string)=>new Date(v+"T12:00:00").toLocaleDateString("pt-BR");
 export default function Dashboard(){
  const router=useRouter();
- const [email,setEmail]=useState("");const [company,setCompany]=useState("");const [role,setRole]=useState("");const [trial,setTrial]=useState<string|null>(null);
+ const [email,setEmail]=useState("");const [company,setCompany]=useState("");const [role,setRole]=useState("");const [trial,setTrial]=useState<string|null>(null);const [tenantOptions,setTenantOptions]=useState<{id:string;name:string;role:string}[]>([]);const [selectedOrgId,setSelectedOrgId]=useState("");
  const [employees,setEmployees]=useState<Employee[]>([]);const [departments,setDepartments]=useState<{id:string;name:string}[]>([]);
  const [alerts,setAlerts]=useState<AlertItem[]>([]);const [benefitCount,setBenefitCount]=useState(0);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [search,setSearch]=useState("");const [mobileNav,setMobileNav]=useState(false);
  const load=useCallback(async()=>{
   const s=createClient();const {data:{user},error:authError}=await s.auth.getUser();if(authError||!user){router.replace("/");return;}setEmail(user.email||"");
-  const {data:membership,error:memberError}=await s.from("organization_memberships").select("organization_id,role").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
-  if(memberError){setError(memberError.message);setLoading(false);return;}if(!membership){router.replace("/onboarding");return;}
-  setRole(membership.role);const id=membership.organization_id;const today=new Date();const iso=today.toISOString().slice(0,10);const in30=new Date(today.getTime()+30*86400000).toISOString().slice(0,10);const in60=new Date(today.getTime()+60*86400000).toISOString().slice(0,10);
+  const {data:memberships,error:memberError}=await s.from("organization_memberships").select("organization_id,role,organizations(id,trade_name,legal_name)").eq("user_id",user.id).eq("status","active");
+  if(memberError){setError(memberError.message);setLoading(false);return;}if(!memberships?.length){router.replace("/onboarding");return;}
+  const available=memberships.map((m:any)=>({id:m.organization_id,role:m.role,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
+  setTenantOptions(available);
+  const membership=available.find(m=>m.id===selectedOrgId)||available[0];
+  if(!selectedOrgId)setSelectedOrgId(membership.id);
+  setRole(membership.role);const id=membership.id;const today=new Date();const iso=today.toISOString().slice(0,10);const in30=new Date(today.getTime()+30*86400000).toISOString().slice(0,10);const in60=new Date(today.getTime()+60*86400000).toISOString().slice(0,10);
   const [org,emp,dept,abs,vac,period,benefit]=await Promise.all([
    s.from("organizations").select("trade_name,legal_name,trial_ends_at").eq("id",id).single(),
    s.from("employees").select("id,employment_status,department_id,admission_date").eq("organization_id",id),
@@ -43,7 +47,7 @@ export default function Dashboard(){
   if(nextVac.length)nextAlerts.push({title:"Férias programadas para os próximos 30 dias",detail:`${nextVac.length} programação(ões) com início próximo.`,level:"info",href:"/dashboard/ferias"});
   if(!nextAlerts.length)nextAlerts.push({title:"Nenhum alerta operacional identificado",detail:"Não há ocorrências nos indicadores monitorados neste momento.",level:"info",href:"/dashboard/relatorios"});
   setAlerts(nextAlerts);setLoading(false);
- },[router]);
+ },[router,selectedOrgId]);
  useEffect(()=>{void load()},[load]);
  async function logout(){const s=createClient();await s.auth.signOut();router.replace("/");router.refresh();}
  const active=employees.filter(e=>e.employment_status==="active").length;const inactive=Math.max(0,employees.length-active);const activePct=employees.length?Math.round(active/employees.length*100):0;
@@ -58,7 +62,7 @@ export default function Dashboard(){
    <nav className="dash-nav dash-nav-modern">{visibleGroups.map(group=><section className="nav-group" key={group.name}><div className="nav-group-heading"><span className={`nav-group-icon ${group.color}`}><group.icon size={15}/></span><div><b>{group.name}</b><small>{group.caption}</small></div></div>{group.items.map(([label,href,Icon])=><a key={href} className={`nav-item nav-item-modern ${href==="/dashboard"?"selected":""}`} href={href} onClick={()=>setMobileNav(false)}><span className={`nav-icon-tile ${group.color}`}><Icon size={16}/></span><span>{label}</span>{href==="/dashboard"&&<span className="nav-current-dot"/>}</a>)}</section>)}</nav>
    <div className="side-bottom"><div className="tenant-chip tenant-chip-modern"><div className="tenant-avatar">{(company||"E").slice(0,1).toUpperCase()}</div><div><b>{company||"Empresa"}</b><span>Ambiente empresarial</span></div><ChevronDown size={15}/></div><button className="logout" onClick={logout}><LogOut size={17}/> Sair da plataforma</button></div>
   </aside>
-  <section className="dash-main"><header className="dash-top dash-top-modern"><button className="mobile-menu-toggle" onClick={()=>setMobileNav(true)} aria-label="Abrir menu"><span/><span/><span/></button><div className="top-context"><span className="top-context-dot"/><span>Central de gestão de pessoas</span></div><div className="top-actions"><span className="role-chip"><ShieldCheck size={14}/>{role}</span><div className="user-pill"><div className="user-avatar">{email.slice(0,1).toUpperCase()}</div><span>{email}</span></div></div></header>
+  <section className="dash-main"><header className="dash-top dash-top-modern"><button className="mobile-menu-toggle" onClick={()=>setMobileNav(true)} aria-label="Abrir menu"><span/><span/><span/></button><div className="top-context"><span className="top-context-dot"/><span>Central de gestão de pessoas</span></div><div className="top-actions">{tenantOptions.length>1&&<label className="tenant-switcher-label"><Building2 size={14}/><select className="tenant-switcher" aria-label="Selecionar empresa" value={selectedOrgId} onChange={e=>setSelectedOrgId(e.target.value)}>{tenantOptions.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}<span className="role-chip"><ShieldCheck size={14}/>{role}</span><div className="user-pill"><div className="user-avatar">{email.slice(0,1).toUpperCase()}</div><span>{email}</span></div></div></header>
    <div className="dash-content dash-content-modern"><div className="welcome-row welcome-row-modern"><div><div className="form-kicker">PAINEL EXECUTIVO · RH & DP</div><h1>Visão geral</h1><p>Olá! Aqui está o panorama operacional de <b>{company||"sua empresa"}</b>.</p></div><div className="date-chip"><CalendarDays size={16}/>{new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"})}</div></div>
     {trial&&<div className="setup-banner"><div className="setup-icon"><Activity/></div><div><b>Período de avaliação</b><p>Seu ambiente está em avaliação até {dateBR(trial.slice(0,10))}.</p></div><span className="status-pill">AVALIAÇÃO</span></div>}
     {error&&<div className="notice error">{error}</div>}
