@@ -45,6 +45,11 @@ BEGIN
         $old$m.role in ('owner','admin','hr_manager','payroll')$old$,
         $new$private.has_org_permission(m.organization_id, 'payroll.manage')$new$
       );
+      v_updated := replace(
+        v_updated,
+        $old$m.role in('owner','admin','hr_manager','payroll')$old$,
+        $new$private.has_org_permission(m.organization_id, 'payroll.manage')$new$
+      );
     ELSIF r.proname = 'reopen_dsr_competence_review' THEN
       v_updated := replace(
         v_updated,
