@@ -32,6 +32,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [state, setState] = useState<"loading" | "allowed" | "denied">("loading");
+  const [selectedOrgId, setSelectedOrgId] = useState("");
+
+  useEffect(() => {
+    const syncOrganization = () => setSelectedOrgId(window.localStorage.getItem("esc_selected_org_id") || "");
+    syncOrganization();
+    window.addEventListener("esc:organization-changed", syncOrganization);
+    window.addEventListener("storage", syncOrganization);
+    return () => {
+      window.removeEventListener("esc:organization-changed", syncOrganization);
+      window.removeEventListener("storage", syncOrganization);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +68,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }
 
       const savedOrg = window.localStorage.getItem("esc_selected_org_id");
-      const membership = memberships.find((item) => item.organization_id === savedOrg) || memberships[0];
+      const requestedOrg = selectedOrgId || savedOrg;
+      const membership = memberships.find((item) => item.organization_id === requestedOrg) || memberships[0];
       if (!savedOrg || savedOrg !== membership.organization_id) {
         window.localStorage.setItem("esc_selected_org_id", membership.organization_id);
       }
@@ -79,7 +92,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
     void verifyAccess();
     return () => { cancelled = true; };
-  }, [pathname, router]);
+  }, [pathname, router, selectedOrgId]);
 
   if (state === "loading") {
     return <div className="loading-screen">Validando acesso à organização...</div>;
