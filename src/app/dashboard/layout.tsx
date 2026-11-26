@@ -73,6 +73,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       if (!savedOrg || savedOrg !== membership.organization_id) {
         window.localStorage.setItem("esc_selected_org_id", membership.organization_id);
       }
+      if (selectedOrgId !== membership.organization_id) {
+        setSelectedOrgId(membership.organization_id);
+      }
 
       const requiredPermission = permissionForPath(pathname);
       if (!requiredPermission || !membership.role_id) {
