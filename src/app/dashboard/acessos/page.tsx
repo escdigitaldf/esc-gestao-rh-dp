@@ -42,7 +42,7 @@ export default function AccessManagementPage(){
   const chosen=os.find(o=>o.id===orgId)||os[0];setOrgId(chosen.id);
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",chosen.id).order("name"),
-   s.from("organization_memberships").select("id,user_id,role_id,role,status,user_profiles(full_name)").eq("organization_id",chosen.id).order("created_at")
+   s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",chosen.id).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao carregar permissões.");setLoading(false);return;}
   setRoles(rr.data||[]);
@@ -59,7 +59,7 @@ export default function AccessManagementPage(){
   const s=createClient();
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",value).order("name"),
-   s.from("organization_memberships").select("id,user_id,role_id,role,status,user_profiles(full_name)").eq("organization_id",value).order("created_at")
+   s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",value).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao trocar empresa.");return;}
   setRoles(rr.data||[]);setMembers((mm.data||[]) as unknown as Member[]);
@@ -107,7 +107,7 @@ export default function AccessManagementPage(){
   <section className="dashboard-panel" style={{marginBottom:20}}>
    <div className="panel-heading"><div><span>USUÁRIOS VINCULADOS</span><h3><Users size={17}/> Perfis por usuário</h3></div><ShieldCheck size={18}/></div>
    {members.length?members.map(m=><div key={m.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(170px,260px)",gap:12,alignItems:"center",padding:"12px 0",borderBottom:"1px solid #edf1f6"}}>
-    <div><b>{m.profile?.full_name||"Usuário"}</b><div style={{fontSize:11,color:"#718096"}}>{m.user_id.slice(0,8)}… · {m.status}</div></div>
+    <div><b>Usuário vinculado</b><div style={{fontSize:11,color:"#718096"}}>{m.user_id.slice(0,8)}… · {m.status}</div></div>
     <select value={m.role_id||""} onChange={e=>void assign(m.id,e.target.value)} style={{padding:10,borderRadius:8,border:"1px solid #d8e2ee",background:"#fff"}}><option value="" disabled>Selecione um perfil</option>{roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>
    </div>):<div className="panel-empty">Nenhum usuário vinculado a esta empresa.</div>}
   </section>
