@@ -6,7 +6,7 @@ import {createClient} from "@/lib/supabase/client";
 
 type Org={id:string;name:string};
 type Role={id:string;organization_id:string;role_key:string;name:string;description:string|null;is_system:boolean};
-type Member={id:string;user_id:string;role_id:string|null;role:string;status:string;profile?:{full_name:string|null}|null};
+type Member={id:string;user_id:string;role_id:string|null;role:string;status:string;full_name?:string|null};
 type Permission={id:string;role_id:string;permission_key:string;allowed:boolean};
 const catalog=[
  {group:"Painel e relatórios",items:[["dashboard.view","Visualizar painel"],["reports.view","Visualizar relatórios"],["reports.export","Exportar relatórios"]]},
@@ -39,14 +39,14 @@ export default function AccessManagementPage(){
   const os=(ms||[]).map((m:any)=>({id:m.organization_id,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setOrgs(os);
   if(!os.length){router.replace("/onboarding");return;}
-  const chosen=os[0];setOrgId(chosen.id);
+  const preferred=typeof window!=="undefined"?window.localStorage.getItem("esc_selected_org_id"):null;\n  const chosen=os.find(o=>o.id===preferred)||os[0];setOrgId(chosen.id);
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",chosen.id).order("name"),
    s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",chosen.id).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao carregar permissões.");setLoading(false);return;}
   setRoles(rr.data||[]);
-  setMembers((mm.data||[]) as unknown as Member[]);
+  const memberRows=(mm.data||[]) as unknown as Member[];\n  const userIds=[...new Set(memberRows.map(m=>m.user_id))];\n  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};\n  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));\n  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
   const nextRole=(rr.data||[])[0];
   setRoleId(nextRole?.id||"");
   if(nextRole){const {data:pp,error:pe}=await s.from("organization_role_permissions").select("id,role_id,permission_key,allowed").eq("role_id",nextRole.id);if(pe)setError(pe.message);setPermissions(pp||[]);}
@@ -55,14 +55,14 @@ export default function AccessManagementPage(){
  },[router]);
  useEffect(()=>{void load()},[load]);
  async function changeOrg(value:string){
-  setOrgId(value);setRoleId("");setPermissions([]);
+  setOrgId(value);if(typeof window!=="undefined")window.localStorage.setItem("esc_selected_org_id",value);setRoleId("");setPermissions([]);
   const s=createClient();
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",value).order("name"),
    s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",value).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao trocar empresa.");return;}
-  setRoles(rr.data||[]);setMembers((mm.data||[]) as unknown as Member[]);
+  setRoles(rr.data||[]);\n  const memberRows=(mm.data||[]) as unknown as Member[];\n  const userIds=[...new Set(memberRows.map(m=>m.user_id))];\n  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};\n  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));\n  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
   const first=rr.data?.[0];if(first){setRoleId(first.id);const p=await s.from("organization_role_permissions").select("id,role_id,permission_key,allowed").eq("role_id",first.id);setPermissions(p.data||[]);}
  }
  async function chooseRole(id:string){
@@ -107,7 +107,7 @@ export default function AccessManagementPage(){
   <section className="dashboard-panel" style={{marginBottom:20}}>
    <div className="panel-heading"><div><span>USUÁRIOS VINCULADOS</span><h3><Users size={17}/> Perfis por usuário</h3></div><ShieldCheck size={18}/></div>
    {members.length?members.map(m=><div key={m.id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(170px,260px)",gap:12,alignItems:"center",padding:"12px 0",borderBottom:"1px solid #edf1f6"}}>
-    <div><b>Usuário vinculado</b><div style={{fontSize:11,color:"#718096"}}>{m.user_id.slice(0,8)}… · {m.status}</div></div>
+    <div><b>{m.full_name||"Usuário sem nome cadastrado"}</b><div style={{fontSize:11,color:"#718096"}}>{m.user_id.slice(0,8)}… · {m.status}</div></div>
     <select value={m.role_id||""} onChange={e=>void assign(m.id,e.target.value)} style={{padding:10,borderRadius:8,border:"1px solid #d8e2ee",background:"#fff"}}><option value="" disabled>Selecione um perfil</option>{roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>
    </div>):<div className="panel-empty">Nenhum usuário vinculado a esta empresa.</div>}
   </section>
