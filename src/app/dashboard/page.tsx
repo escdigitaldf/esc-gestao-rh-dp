@@ -15,11 +15,11 @@ const dateBR=(v:string)=>new Date(v+"T12:00:00").toLocaleDateString("pt-BR");
 export default function Dashboard(){
  const router=useRouter();
  const [email,setEmail]=useState("");const [company,setCompany]=useState("");const [role,setRole]=useState("");const [trial,setTrial]=useState<string|null>(null);const [tenantOptions,setTenantOptions]=useState<{id:string;name:string;role:string}[]>([]);const [selectedOrgId,setSelectedOrgId]=useState("");
- const [employees,setEmployees]=useState<Employee[]>([]);const [departments,setDepartments]=useState<{id:string;name:string}[]>([]);
+ const [employees,setEmployees]=useState<Employee[]>([]);const [departments,setDepartments]=useState<{id:string;name:string}[]>([]);const [grants,setGrants]=useState<string[]>([]);
  const [alerts,setAlerts]=useState<AlertItem[]>([]);const [benefitCount,setBenefitCount]=useState(0);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [search,setSearch]=useState("");const [mobileNav,setMobileNav]=useState(false);
  const load=useCallback(async()=>{
   const s=createClient();const {data:{user},error:authError}=await s.auth.getUser();if(authError||!user){router.replace("/");return;}setEmail(user.email||"");
-  const {data:memberships,error:memberError}=await s.from("organization_memberships").select("organization_id,role,organizations(id,trade_name,legal_name)").eq("user_id",user.id).eq("status","active");
+  const {data:memberships,error:memberError}=await s.from("organization_memberships").select("organization_id,role,role_id,organizations(id,trade_name,legal_name)").eq("user_id",user.id).eq("status","active");
   if(memberError){setError(memberError.message);setLoading(false);return;}if(!memberships?.length){router.replace("/onboarding");return;}
   const available=memberships.map((m:any)=>({id:m.organization_id,role:m.role,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setTenantOptions(available);
@@ -27,7 +27,9 @@ export default function Dashboard(){
   const membership=available.find(m=>m.id===(selectedOrgId||savedOrgId))||available[0];
   if(!selectedOrgId)setSelectedOrgId(membership.id);
   if(typeof window!=="undefined")window.localStorage.setItem("esc_selected_org_id",membership.id);
-  setRole(membership.role);const id=membership.id;const today=new Date();const iso=today.toISOString().slice(0,10);const in30=new Date(today.getTime()+30*86400000).toISOString().slice(0,10);const in60=new Date(today.getTime()+60*86400000).toISOString().slice(0,10);
+  setRole(membership.role);
+  if(membership.role_id){const {data:roleGrants}=await s.from("organization_role_permissions").select("permission_key").eq("role_id",membership.role_id).eq("allowed",true);setGrants((roleGrants||[]).map((p:any)=>p.permission_key));}else setGrants([]);
+  const id=membership.id;const today=new Date();const iso=today.toISOString().slice(0,10);const in30=new Date(today.getTime()+30*86400000).toISOString().slice(0,10);const in60=new Date(today.getTime()+60*86400000).toISOString().slice(0,10);
   const [org,emp,dept,abs,vac,period,benefit]=await Promise.all([
    s.from("organizations").select("trade_name,legal_name,trial_ends_at").eq("id",id).single(),
    s.from("employees").select("id,employment_status,department_id,admission_date").eq("organization_id",id),
@@ -54,7 +56,8 @@ export default function Dashboard(){
  async function logout(){const s=createClient();await s.auth.signOut();router.replace("/");router.refresh();}
  const active=employees.filter(e=>e.employment_status==="active").length;const inactive=Math.max(0,employees.length-active);const activePct=employees.length?Math.round(active/employees.length*100):0;
  const departmentBars=useMemo(()=>departments.map(d=>({...d,total:employees.filter(e=>e.department_id===d.id).length})).sort((a,b)=>b.total-a.total).slice(0,6),[departments,employees]);const maxDept=Math.max(1,...departmentBars.map(x=>x.total));
- const visibleGroups=groups.map(g=>({...g,items:g.items.filter(x=>x[0].toLowerCase().includes(search.toLowerCase()))})).filter(g=>g.items.length);
+ const routePermission:Record<string,string>={"/dashboard":"dashboard.view","/dashboard/relatorios":"reports.view","/dashboard/colaboradores":"employees.view","/dashboard/admissao":"admissions.view","/dashboard/departamentos":"departments.view","/dashboard/acessos":"roles.manage","/dashboard/cargos":"positions.view","/dashboard/ferias":"vacations.view","/dashboard/afastamentos":"absences.view","/dashboard/beneficios":"benefits.view","/dashboard/treinamentos":"training.view","/dashboard/avaliacoes":"performance.view","/dashboard/saude-ocupacional":"occupational_health.view","/dashboard/documentos":"documents.view","/dashboard/folha":"payroll.view","/dashboard/folha/eventos":"payroll.view","/dashboard/folha/decimo-terceiro":"payroll.view","/dashboard/folha/rescisoes":"payroll.view","/dashboard/folha/encargos-patronais":"payroll.view","/dashboard/folha/dsr":"payroll.view","/dashboard/frequencia":"attendance.view","/dashboard/folha/configuracoes":"payroll.view"};
+ const visibleGroups=groups.map(g=>({...g,items:g.items.filter(x=>x[0].toLowerCase().includes(search.toLowerCase())&&grants.includes(routePermission[x[1]]||"__denied__"))})).filter(g=>g.items.length);
  if(loading)return <div className="loading-screen">Carregando seu ambiente de gestão...</div>;
  return <main className="dash-shell dash-modern">
   {mobileNav&&<button className="mobile-nav-backdrop" aria-label="Fechar menu" onClick={()=>setMobileNav(false)}/>}
