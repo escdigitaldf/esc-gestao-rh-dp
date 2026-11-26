@@ -21,7 +21,7 @@ export default function Dashboard(){
   const s=createClient();const {data:{user},error:authError}=await s.auth.getUser();if(authError||!user){router.replace("/");return;}setEmail(user.email||"");
   const {data:memberships,error:memberError}=await s.from("organization_memberships").select("organization_id,role,role_id,organizations(id,trade_name,legal_name)").eq("user_id",user.id).eq("status","active");
   if(memberError){setError(memberError.message);setLoading(false);return;}if(!memberships?.length){router.replace("/onboarding");return;}
-  const available=memberships.map((m:any)=>({id:m.organization_id,role:m.role,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
+  const available=memberships.map((m:any)=>({id:m.organization_id,role:m.role,role_id:m.role_id as string|null,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setTenantOptions(available);
   const savedOrgId=typeof window!=="undefined"?window.localStorage.getItem("esc_selected_org_id"):null;
   const membership=available.find(m=>m.id===(selectedOrgId||savedOrgId))||available[0];
