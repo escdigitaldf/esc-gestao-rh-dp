@@ -23,8 +23,10 @@ export default function Dashboard(){
   if(memberError){setError(memberError.message);setLoading(false);return;}if(!memberships?.length){router.replace("/onboarding");return;}
   const available=memberships.map((m:any)=>({id:m.organization_id,role:m.role,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setTenantOptions(available);
-  const membership=available.find(m=>m.id===selectedOrgId)||available[0];
+  const savedOrgId=typeof window!=="undefined"?window.localStorage.getItem("esc_selected_org_id"):null;
+  const membership=available.find(m=>m.id===(selectedOrgId||savedOrgId))||available[0];
   if(!selectedOrgId)setSelectedOrgId(membership.id);
+  if(typeof window!=="undefined")window.localStorage.setItem("esc_selected_org_id",membership.id);
   setRole(membership.role);const id=membership.id;const today=new Date();const iso=today.toISOString().slice(0,10);const in30=new Date(today.getTime()+30*86400000).toISOString().slice(0,10);const in60=new Date(today.getTime()+60*86400000).toISOString().slice(0,10);
   const [org,emp,dept,abs,vac,period,benefit]=await Promise.all([
    s.from("organizations").select("trade_name,legal_name,trial_ends_at").eq("id",id).single(),
