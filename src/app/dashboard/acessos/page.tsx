@@ -39,14 +39,19 @@ export default function AccessManagementPage(){
   const os=(ms||[]).map((m:any)=>({id:m.organization_id,name:m.organizations?.trade_name||m.organizations?.legal_name||"Empresa"}));
   setOrgs(os);
   if(!os.length){router.replace("/onboarding");return;}
-  const preferred=typeof window!=="undefined"?window.localStorage.getItem("esc_selected_org_id"):null;\n  const chosen=os.find(o=>o.id===preferred)||os[0];setOrgId(chosen.id);
+  const preferred=typeof window!=="undefined"?window.localStorage.getItem("esc_selected_org_id"):null;
+  const chosen=os.find(o=>o.id===preferred)||os[0];setOrgId(chosen.id);
   const [rr,mm]=await Promise.all([
    s.from("organization_roles").select("id,organization_id,role_key,name,description,is_system").eq("organization_id",chosen.id).order("name"),
    s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",chosen.id).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao carregar permissões.");setLoading(false);return;}
   setRoles(rr.data||[]);
-  const memberRows=(mm.data||[]) as unknown as Member[];\n  const userIds=[...new Set(memberRows.map(m=>m.user_id))];\n  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};\n  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));\n  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
+  const memberRows=(mm.data||[]) as unknown as Member[];
+  const userIds=[...new Set(memberRows.map(m=>m.user_id))];
+  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};
+  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));
+  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
   const nextRole=(rr.data||[])[0];
   setRoleId(nextRole?.id||"");
   if(nextRole){const {data:pp,error:pe}=await s.from("organization_role_permissions").select("id,role_id,permission_key,allowed").eq("role_id",nextRole.id);if(pe)setError(pe.message);setPermissions(pp||[]);}
@@ -62,7 +67,12 @@ export default function AccessManagementPage(){
    s.from("organization_memberships").select("id,user_id,role_id,role,status").eq("organization_id",value).order("created_at")
   ]);
   if(rr.error||mm.error){setError(rr.error?.message||mm.error?.message||"Falha ao trocar empresa.");return;}
-  setRoles(rr.data||[]);\n  const memberRows=(mm.data||[]) as unknown as Member[];\n  const userIds=[...new Set(memberRows.map(m=>m.user_id))];\n  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};\n  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));\n  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
+  setRoles(rr.data||[]);
+  const memberRows=(mm.data||[]) as unknown as Member[];
+  const userIds=[...new Set(memberRows.map(m=>m.user_id))];
+  const {data:profiles}=userIds.length?await s.from("user_profiles").select("id,full_name").in("id",userIds):{data:[] as any[]};
+  const profileMap=new Map((profiles||[]).map((p:any)=>[p.id,p.full_name]));
+  setMembers(memberRows.map(m=>({...m,full_name:profileMap.get(m.user_id)||null})));
   const first=rr.data?.[0];if(first){setRoleId(first.id);const p=await s.from("organization_role_permissions").select("id,role_id,permission_key,allowed").eq("role_id",first.id);setPermissions(p.data||[]);}
  }
  async function chooseRole(id:string){
