@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, ArrowRight, CalendarDays, CheckCircle2, FileText, LockKeyhole, ShieldCheck, Users, WalletCards } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { checkPasswordExposure } from "@/lib/security/password-exposure";
 
 export default function Home() {
   const router = useRouter();
@@ -18,6 +19,17 @@ export default function Home() {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(""); setMessage("");
     try {
+      if (mode === "signup") {
+        if (password.length < 12) {
+          setError("A senha precisa ter pelo menos 12 caracteres.");
+          return;
+        }
+        const exposure = await checkPasswordExposure(password);
+        if (exposure.compromised) {
+          setError(`Esta senha apareceu em ${exposure.occurrences.toLocaleString("pt-BR")} ocorrências de vazamentos conhecidos. Escolha outra senha.`);
+          return;
+        }
+      }
       const supabase = createClient();
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
@@ -67,7 +79,7 @@ export default function Home() {
         <form onSubmit={submit}>
           {mode === "signup" && <label>Nome completo<input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome" required autoComplete="name"/></label>}
           <label>E-mail corporativo<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com.br" required autoComplete="email"/></label>
-          <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo de 8 caracteres" required minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"}/></label>
+          <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={mode === "login" ? "Sua senha" : "Mínimo de 12 caracteres"} required minLength={mode === "login" ? 8 : 12} autoComplete={mode === "login" ? "current-password" : "new-password"}/></label>
           {error && <div className="notice error">{error}</div>}
           {message && <div className="notice success"><CheckCircle2 size={16}/>{message}</div>}
           <button className="submit" disabled={busy}>{busy ? "Aguarde..." : mode === "login" ? "Acessar plataforma" : "Criar meu acesso"} <ArrowRight size={17}/></button>
