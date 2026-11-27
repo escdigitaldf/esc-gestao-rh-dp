@@ -18,8 +18,20 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getUser();
-  response.headers.set("Cache-Control", "private, no-store");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
+    const loginUrl = new URL("/", request.url);
+    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (request.nextUrl.pathname.startsWith("/dashboard")) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+
   return response;
 }
 
