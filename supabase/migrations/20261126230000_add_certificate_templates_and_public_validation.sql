@@ -42,7 +42,7 @@ ALTER TABLE public.training_participants
   ADD CONSTRAINT training_participants_certificate_template_org_fk
   FOREIGN KEY (certificate_template_id, organization_id)
   REFERENCES public.training_certificate_templates(id, organization_id)
-  ON DELETE SET NULL;
+  ON DELETE RESTRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS training_participants_certificate_token_unique
   ON public.training_participants(certificate_verification_token)
   WHERE certificate_verification_token IS NOT NULL;
@@ -68,20 +68,20 @@ DROP POLICY IF EXISTS training_certificate_templates_read ON public.training_cer
 DROP POLICY IF EXISTS training_certificate_templates_read_guard ON public.training_certificate_templates;
 DROP POLICY IF EXISTS training_certificate_templates_manage ON public.training_certificate_templates;
 DROP POLICY IF EXISTS training_certificate_templates_manage_guard ON public.training_certificate_templates;
-CREATE POLICY training_certificate_templates_read ON public.training_certificate_templates
-  AS PERMISSIVE FOR SELECT TO authenticated
-  USING (private.has_org_permission(organization_id,'training.view'));
-CREATE POLICY training_certificate_templates_read_guard ON public.training_certificate_templates
-  AS RESTRICTIVE FOR SELECT TO authenticated
-  USING (private.has_org_permission(organization_id,'training.view'));
-CREATE POLICY training_certificate_templates_manage ON public.training_certificate_templates
-  AS PERMISSIVE FOR ALL TO authenticated
-  USING (private.has_org_permission(organization_id,'training.manage'))
-  WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
-CREATE POLICY training_certificate_templates_manage_guard ON public.training_certificate_templates
-  AS RESTRICTIVE FOR ALL TO authenticated
-  USING (private.has_org_permission(organization_id,'training.manage'))
-  WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
+DROP POLICY IF EXISTS training_certificate_templates_insert ON public.training_certificate_templates;
+DROP POLICY IF EXISTS training_certificate_templates_insert_guard ON public.training_certificate_templates;
+DROP POLICY IF EXISTS training_certificate_templates_update ON public.training_certificate_templates;
+DROP POLICY IF EXISTS training_certificate_templates_update_guard ON public.training_certificate_templates;
+DROP POLICY IF EXISTS training_certificate_templates_delete ON public.training_certificate_templates;
+DROP POLICY IF EXISTS training_certificate_templates_delete_guard ON public.training_certificate_templates;
+CREATE POLICY training_certificate_templates_read ON public.training_certificate_templates AS PERMISSIVE FOR SELECT TO authenticated USING (private.has_org_permission(organization_id,'training.view'));
+CREATE POLICY training_certificate_templates_read_guard ON public.training_certificate_templates AS RESTRICTIVE FOR SELECT TO authenticated USING (private.has_org_permission(organization_id,'training.view'));
+CREATE POLICY training_certificate_templates_insert ON public.training_certificate_templates AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
+CREATE POLICY training_certificate_templates_insert_guard ON public.training_certificate_templates AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
+CREATE POLICY training_certificate_templates_update ON public.training_certificate_templates AS PERMISSIVE FOR UPDATE TO authenticated USING (private.has_org_permission(organization_id,'training.manage')) WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
+CREATE POLICY training_certificate_templates_update_guard ON public.training_certificate_templates AS RESTRICTIVE FOR UPDATE TO authenticated USING (private.has_org_permission(organization_id,'training.manage')) WITH CHECK (private.has_org_permission(organization_id,'training.manage'));
+CREATE POLICY training_certificate_templates_delete ON public.training_certificate_templates AS PERMISSIVE FOR DELETE TO authenticated USING (private.has_org_permission(organization_id,'training.manage'));
+CREATE POLICY training_certificate_templates_delete_guard ON public.training_certificate_templates AS RESTRICTIVE FOR DELETE TO authenticated USING (private.has_org_permission(organization_id,'training.manage'));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.training_certificate_templates TO authenticated;
 CREATE OR REPLACE FUNCTION public.verify_training_certificate(p_token uuid)
 RETURNS TABLE (
