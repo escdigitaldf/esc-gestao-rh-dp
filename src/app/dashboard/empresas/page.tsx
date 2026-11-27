@@ -23,13 +23,13 @@ const emptyForm = {
   city: "", state: "DF", tax_regime: ""
 };
 
-const digits = (value: string) => value.replace(/\\D/g, "");
+const digits = (value: string) => value.replace(/\D/g, "");
 const formatCnpj = (value: string) => {
   const v = digits(value).slice(0, 14);
-  return v.replace(/^(\\d{2})(\\d)/, "$1.$2")
-    .replace(/^(\\d{2})\\.(\\d{3})(\\d)/, "$1.$2.$3")
-    .replace(/\\.(\\d{3})(\\d)/, ".$1/$2")
-    .replace(/(\\d{4})(\\d)/, "$1-$2");
+  return v.replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
 };
 
 export default function CompaniesPage() {
