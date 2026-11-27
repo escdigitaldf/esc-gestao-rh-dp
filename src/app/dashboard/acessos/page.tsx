@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {Building2,Check,LockKeyhole,Save,ShieldCheck,Users} from "lucide-react";
+import {ArrowLeft,Building2,Check,LockKeyhole,Save,ShieldCheck,Users} from "lucide-react";
 import {createClient} from "@/lib/supabase/client";
 
 type Org={id:string;name:string};
@@ -107,6 +107,11 @@ export default function AccessManagementPage(){
  const memberCount=members.length;
  if(loading)return <div className="loading-screen">Carregando usuários e permissões...</div>;
  return <main className="dash-content" style={{maxWidth:1120,margin:"0 auto",padding:28}}>
+  <header className="module-top" style={{margin:"-28px -28px 28px",width:"calc(100% + 56px)"}}>
+   <a href="/dashboard"><ArrowLeft size={16}/> Painel</a>
+   <b><span className="brand-mark">ESC</span> Gestão de RH e DP</b>
+   <span>Acessos e permissões</span>
+  </header>
   <div className="welcome-row"><div><div className="form-kicker">ADMINISTRAÇÃO DO AMBIENTE</div><h1>Acessos e permissões</h1><p>Defina o que cada usuário pode visualizar e executar em cada CNPJ.</p></div><span className="role-chip"><LockKeyhole size={14}/> Controle por empresa</span></div>
   {error&&<div className="notice error">{error}</div>}{notice&&<div className="notice success">{notice}</div>}
   <section className="dashboard-panel" style={{marginBottom:20}}>
